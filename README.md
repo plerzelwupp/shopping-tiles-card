@@ -15,8 +15,9 @@ It started as a personal project to give a Bring! shopping list in Home Assistan
 - **Open items as tiles** – icon, name and the item's details (e.g. "1 kg, organic") in one line below.
 - **Icons are picked automatically** from the item name. About 140 German and 140 English keywords map to 61 icons from Home Assistant's built-in icon set (Material Design Icons). Items without a match get a basket icon. You can add your own mappings.
 - **Colours by category** – fruit & vegetables, dairy, meat & fish, bakery & pantry, household, drinks, sweets & snacks. The colours come from your Home Assistant theme, so light and dark mode both work.
-- **Tap to check off**, with a short "Undo".
-- **Long press (or right-click) to edit** – rename, change the details or delete an item.
+- **Tap to check off**, with a short "Undo" – it also covers several quick check-offs at once.
+- **Long press (or right-click) to edit** – rename, change the details or delete an item (deleting can be undone too).
+- **Keyboard and screen reader friendly** – Tab moves between tiles, Enter or Space checks off, F2 or the context menu key opens "Edit".
 - **Recently bought** – recently checked-off items appear as small chips; one tap puts them back on the list.
 - **"+N more"** – if not everything fits, the last tile opens a pop-up with all open items and the recently bought ones.
 - **Fits the sections grid** – all tiles have the same size; the number of tile rows follows the card's height.
@@ -80,8 +81,8 @@ icons:
 
 - The icon set has no matching icon for some common items (potatoes, tomatoes, butter, honey, jam, …) – they get the basket unless you add your own mapping.
 - "Recently bought" uses the order in which the list provides completed items. Bring! does not provide a timestamp, so the order is only approximate.
-- Tested with Home Assistant 2026.11 in Chrome on Windows and on an Android phone (light and dark theme). Older versions may work but have not been tested.
-- Tiles are made for touch and mouse; keyboard operation is limited.
+- Tested with Home Assistant 2026.11 in Chrome on Windows and on an Android phone (light and dark theme), with the Bring! integration, Local To-do and the built-in Shopping List. Older versions may work but have not been tested.
+- If the list cannot be read (e.g. the entity was removed), the card shows the error and tries again every 30 seconds.
 - This is a hobby project. Feedback and issues are welcome; please don't expect quick release cycles.
 
 ## Support
