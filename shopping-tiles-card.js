@@ -7,7 +7,7 @@
  *
  * https://github.com/plerzelwupp/shopping-tiles-card – MIT License, (c) 2026 plerzelwupp
  */
-const STC_VERSION = "1.0.1";
+const STC_VERSION = "1.1.0";
 
 // Reihenfolge zählt: genauere Begriffe vor allgemeinen. "=wort" trifft nur ganze Wörter.
 const EK_ICONS = [
@@ -101,6 +101,8 @@ const EK_TEXT = {
     recent: "Zuletzt:", recentTitle: "Zuletzt gekauft", readd: "Antippen, um wieder auf die Liste zu setzen",
     hold: "lange drücken zum Bearbeiten", edit: "Artikel bearbeiten", name: "Name", desc: "Angabe (z. B. 1 kg, Bio)",
     save: "Speichern", del: "Löschen", cancel: "Abbrechen",
+    deleted: (n) => `„${n}“ gelöscht.`, doneN: (n) => `${n} Artikel abgehakt.`, changes: (n) => `${n} Änderungen.`,
+    keys: "Enter: abhaken, F2 oder Kontextmenü-Taste: bearbeiten",
   },
   en: {
     title: "Shopping list", open: (n) => `${n} open`, more: "more", showAll: "Show all",
@@ -111,6 +113,8 @@ const EK_TEXT = {
     recent: "Recent:", recentTitle: "Recently bought", readd: "Tap to add it to the list again",
     hold: "long press to edit", edit: "Edit item", name: "Name", desc: "Details (e.g. 1 kg, organic)",
     save: "Save", del: "Delete", cancel: "Cancel",
+    deleted: (n) => `“${n}” deleted.`, doneN: (n) => `${n} items checked off.`, changes: (n) => `${n} changes.`,
+    keys: "Enter: check off, F2 or context menu key: edit",
   },
 };
 
@@ -150,7 +154,8 @@ class ShoppingTilesCard extends HTMLElement {
       // andere Liste gewählt: neu abonnieren / other list: subscribe again
       this._unsubscribe();
       this._items = [];
-      this._lastDone = null;
+      this._undoListe = [];
+      this._fehler = null;
     }
     this._built = false;
     if (this._hass) {
@@ -177,6 +182,7 @@ class ShoppingTilesCard extends HTMLElement {
   }
   disconnectedCallback() {
     this._unsubscribe();
+    clearTimeout(this._retryTimer);
     if (this._ro) this._ro.disconnect();
   }
 
@@ -184,14 +190,19 @@ class ShoppingTilesCard extends HTMLElement {
     if (this._subscribing || !this._hass) return;
     this._subscribing = true;
     this._hass.connection.subscribeMessage(
-      (msg) => { this._items = msg.items || []; this._render(); },
+      (msg) => { this._fehler = null; this._items = msg.items || []; this._render(); },
       { type: "todo/item/subscribe", entity_id: this._config.entity }
     ).then((unsub) => {
       this._unsub = unsub; this._subscribing = false;
       if (!this.isConnected) this._unsubscribe();
     }).catch((err) => {
       this._subscribing = false;
-      this._grid.innerHTML = `<div class="leer">${this._t.error}: ${ekEsc(err.message || err)}</div>`;
+      // Fehler merken, damit _render ihn nicht überschreibt / keep the error so _render does not overwrite it
+      this._fehler = `${this._t.error}: ${err.message || err}`;
+      this._render();
+      // nach 30 s erneut versuchen, solange die Karte angezeigt wird / retry after 30 s while the card is shown
+      clearTimeout(this._retryTimer);
+      this._retryTimer = setTimeout(() => { if (this.isConnected && !this._unsub) this._subscribe(); }, 30000);
     });
   }
 
@@ -235,6 +246,8 @@ class ShoppingTilesCard extends HTMLElement {
                   box-sizing:border-box; width:100%; height:100px; overflow:hidden;
                   display:flex; flex-direction:column; align-items:center; justify-content:center; }
         .kachel:active { transform: scale(0.96); }
+        .kachel:focus-visible, .chip:focus-visible, .zahl:focus-visible, .undo button:focus-visible {
+                  outline: 2px solid var(--primary-color); outline-offset: 2px; }
         .kreis { width:38px; height:38px; flex:none; border-radius:50%; display:flex; align-items:center; justify-content:center;
                  background: rgba(var(--k-rgb), 0.18); }
         .kreis ha-icon { --mdc-icon-size: 22px; color: rgb(var(--k-rgb)); }
@@ -247,7 +260,7 @@ class ShoppingTilesCard extends HTMLElement {
                 white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
         .leer { grid-column: 1 / -1; color: var(--secondary-text-color); text-align:center; padding: 12px 0; }
         .undo { display:none; font-size:12px; color: var(--secondary-text-color); white-space:nowrap; }
-        .undo a { color: var(--primary-color); cursor:pointer; margin-left:6px; }
+        .undo button { font: inherit; background:none; border:none; padding:0; color: var(--primary-color); cursor:pointer; margin-left:6px; }
         form { display:flex; gap:8px; align-items:center; }
         .status { display:flex; align-items:center; gap:10px; flex:1; min-height:0; }
         .status .zahl { padding:4px 10px; }
@@ -291,7 +304,7 @@ class ShoppingTilesCard extends HTMLElement {
         <div class="grid haupt"><div class="leer">${t.loading}</div></div>
         <div class="status">
           <button type="button" class="zahl" title="${t.showAll}"></button>
-          <div class="undo"><span class="undotext"></span><a>${t.undo}</a></div>
+          <div class="undo" role="status"><span class="undotext"></span><button type="button">${t.undo}</button></div>
           <div class="chips aus"></div>
         </div>
         <form>
@@ -386,7 +399,34 @@ class ShoppingTilesCard extends HTMLElement {
         this._bearbeiten(k.dataset.uid);
       });
     }
-    this._undo.querySelector("a").addEventListener("click", () => this._rueckgaengig());
+    // Tastatur: Enter/Leertaste wie Antippen, F2 oder Kontextmenü-Taste zum Bearbeiten
+    // keyboard: Enter/Space like a tap, F2 or the context menu key to edit
+    const taste = (e) => {
+      const k = e.target.closest(".kachel");
+      if (!k) return;
+      if (e.key === "Enter" || e.key === " ") {
+        e.preventDefault();
+        if (e.currentTarget === this._grid && !k.classList.contains("mehr")) {
+          this._fokusIndex = [...this._grid.querySelectorAll(".kachel")].indexOf(k);
+        }
+        this._lang = false;
+        klick(e);
+      } else if ((e.key === "F2" || e.key === "ContextMenu" || (e.key === "F10" && e.shiftKey))
+                 && !k.classList.contains("mehr") && !k.classList.contains("zuletzt")) {
+        e.preventDefault();
+        this._bearbeiten(k.dataset.uid);
+      }
+    };
+    for (const g of [this._grid, this._alle, this._zuletztAlle]) g.addEventListener("keydown", taste);
+    // nach dem Schließen von „Bearbeiten“ zurück zur Kachel / back to the tile after closing "edit"
+    this._bDialog.addEventListener("close", () => {
+      const uid = this._fokusUid;
+      this._fokusUid = null;
+      if (!uid) return;
+      const k = [...this._grid.querySelectorAll(".kachel")].find((x) => x.dataset.uid === uid);
+      if (k) k.focus();
+    });
+    this._undo.querySelector("button").addEventListener("click", () => this._rueckgaengig());
     r.querySelector("form").addEventListener("submit", (e) => {
       e.preventDefault();
       const inp = r.querySelector("input");
@@ -412,7 +452,7 @@ class ShoppingTilesCard extends HTMLElement {
     // Kachelreihen: fest (rows: 1–5) oder automatisch aus der Kartenhöhe im Raster
     // Rows of tiles: fixed (rows: 1–5) or automatic from the card height in the grid
     const r = this._config.rows;
-    if (r !== undefined && r !== "auto") return Math.max(1, Number(r) || 1);
+    if (r !== undefined && r !== "auto") return Math.min(5, Math.max(1, Number(r) || 1));
     if (this._gemessen) return this._gemessen;
     const g = this._config.grid_options?.rows;
     if (typeof g !== "number") return 1;
@@ -450,7 +490,9 @@ class ShoppingTilesCard extends HTMLElement {
     const icon = this._icon(i.summary);
     const hinweis = zuletzt ? this._t.readd : `${this._t.tap}, ${this._t.hold}`;
     return `
-      <div class="kachel${zuletzt ? " zuletzt" : ""}" lang="${this._t === EK_TEXT.de ? "de" : "en"}" data-uid="${ekEsc(i.uid)}" data-name="${ekEsc(name)}" title="${ekEsc(name)}${i.description ? " – " + ekEsc(i.description) : ""} (${hinweis})">
+      <div class="kachel${zuletzt ? " zuletzt" : ""}" role="button" tabindex="0" lang="${this._t === EK_TEXT.de ? "de" : "en"}" data-uid="${ekEsc(i.uid)}" data-name="${ekEsc(name)}"
+           aria-label="${ekEsc(name)}${i.description ? ", " + ekEsc(i.description) : ""}" aria-description="${zuletzt ? this._t.readd : this._t.keys}"
+           title="${ekEsc(name)}${i.description ? " – " + ekEsc(i.description) : ""} (${hinweis})">
         <div class="kreis" style="--k-rgb: ${ekFarbe(icon)}"><ha-icon icon="${ekEsc(icon)}"></ha-icon></div>
         <div class="name">${ekEsc(name)}</div>
         ${i.description ? `<div class="info">${ekEsc(i.description)}</div>` : ""}
@@ -460,12 +502,17 @@ class ShoppingTilesCard extends HTMLElement {
   _render() {
     if (!this._grid) return;
     const t = this._t;
+    if (this._fehler) {
+      this._grid.innerHTML = `<div class="leer">${ekEsc(this._fehler)}</div>`;
+      return;
+    }
     const offen = this._items.filter((i) => i.status === "needs_action");
     this._zahl.textContent = t.open(offen.length);
     this._renderZuletzt(offen);
     if (!offen.length) {
       this._grid.innerHTML = `<div class="leer">${t.empty}</div>`;
       this._alle.innerHTML = `<div class="leer">${t.empty}</div>`;
+      this._fokusIndex = null;
       return;
     }
     const max = Math.max(1, (this._spalten || 4) * this._zeilen());
@@ -475,12 +522,18 @@ class ShoppingTilesCard extends HTMLElement {
       const zeigen = offen.slice(0, max - 1);
       const rest = offen.length - zeigen.length;
       this._grid.innerHTML = zeigen.map((i) => this._kachel(i)).join("") + `
-        <div class="kachel mehr" title="${t.showAllItems}">
+        <div class="kachel mehr" role="button" tabindex="0" aria-label="+${rest} ${t.more}, ${t.showAllItems}" title="${t.showAllItems}">
           <div class="plus">+${rest}</div>
           <div class="name">${t.more}</div>
         </div>`;
     }
     this._alle.innerHTML = offen.map((i) => this._kachel(i)).join("");
+    // nach Abhaken per Tastatur die nächste Kachel fokussieren / after a keyboard check-off focus the next tile
+    if (this._fokusIndex != null) {
+      const kacheln = this._grid.querySelectorAll(".kachel");
+      if (kacheln.length) kacheln[Math.min(this._fokusIndex, kacheln.length - 1)].focus();
+      this._fokusIndex = null;
+    }
   }
 
   _renderZuletzt(offen) {
@@ -545,7 +598,9 @@ class ShoppingTilesCard extends HTMLElement {
     r.querySelector("#bname").value = i.summary || "";
     r.querySelector("#bdesc").value = i.description || "";
     if (this._dialog.open) this._dialog.close();
+    this._fokusUid = uid;
     this._bDialog.showModal();
+    r.querySelector("#bname").focus();
   }
 
   _speichern() {
@@ -563,8 +618,13 @@ class ShoppingTilesCard extends HTMLElement {
 
   _loeschen() {
     const uid = this._bUid;
+    const i = this._items.find((x) => x.uid === uid);
+    this._fokusUid = null;
     this._bDialog.close();
-    if (uid) this._dienst("remove_item", { item: uid }).catch(() => {});
+    if (!uid || !i) return;
+    const eintrag = { art: "del", uid, summary: i.summary, description: i.description || "" };
+    this._dienst("remove_item", { item: uid }).catch(() => this._undoEntfernen(eintrag));
+    this._undoZeigen(eintrag);
   }
 
   _oeffnen() {
@@ -575,28 +635,62 @@ class ShoppingTilesCard extends HTMLElement {
     if (!uid) return;
     el.style.opacity = "0.3";
     this._vibrieren("success");
+    const eintrag = { art: "done", uid, summary: name };
     this._dienst("update_item", { item: uid, status: "completed" }).catch(() => {
       el.style.opacity = "";
-      if (this._lastDone === uid) { clearTimeout(this._undoTimer); this._undoEnde(); }
+      this._undoEntfernen(eintrag);
     });
-    this._lastDone = uid;
-    this._undo.querySelector(".undotext").textContent = this._t.done(name);
+    this._undoZeigen(eintrag);
+  }
+
+  // Rückgängig gilt für alle Aktionen der letzten 10 s / undo covers every action of the last 10 s
+  _undoZeigen(eintrag) {
+    this._undoListe = [...(this._undoListe || []), eintrag];
+    this._undoText();
     this._undo.style.display = "block";
     this._status.classList.add("undo-aktiv");
     clearTimeout(this._undoTimer);
     this._undoTimer = setTimeout(() => this._undoEnde(), 10000);
   }
 
+  _undoEntfernen(eintrag) {
+    this._undoListe = (this._undoListe || []).filter((x) => x !== eintrag);
+    if (!this._undoListe.length) { clearTimeout(this._undoTimer); this._undoEnde(); } else this._undoText();
+  }
+
+  _undoText() {
+    const t = this._t;
+    const l = this._undoListe;
+    const name = (x) => ekGross(x.summary);
+    let text;
+    if (l.length === 1) text = l[0].art === "del" ? t.deleted(name(l[0])) : t.done(name(l[0]));
+    else if (l.every((x) => x.art === "done")) text = t.doneN(l.length);
+    else text = t.changes(l.length);
+    this._undo.querySelector(".undotext").textContent = text;
+  }
+
   _undoEnde() {
     this._undo.style.display = "none";
     this._status.classList.remove("undo-aktiv");
-    this._lastDone = null;
+    this._undoListe = [];
     requestAnimationFrame(() => this._chipsKuerzen());
   }
 
   _rueckgaengig() {
-    if (!this._lastDone) return;
-    this._dienst("update_item", { item: this._lastDone, status: "needs_action" }).catch(() => {});
+    const liste = this._undoListe || [];
+    if (!liste.length) return;
+    for (const x of liste) {
+      if (x.art === "done") {
+        this._dienst("update_item", { item: x.uid, status: "needs_action" }).catch(() => {});
+      } else {
+        // Gelöschtes neu anlegen; die Angabe nur, wenn die Liste sie kennt (Merkmal 64)
+        // add a deleted item again; the description only if the list supports it (feature 64)
+        const merkmale = this._hass.states[this._config.entity]?.attributes?.supported_features || 0;
+        const daten = { item: x.summary };
+        if (x.description && (merkmale & 64)) daten.description = x.description;
+        this._dienst("add_item", daten).catch(() => {});
+      }
+    }
     clearTimeout(this._undoTimer);
     this._undoEnde();
   }
