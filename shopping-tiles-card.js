@@ -7,7 +7,7 @@
  *
  * https://github.com/plerzelwupp/shopping-tiles-card – MIT License, (c) 2026 plerzelwupp
  */
-const STC_VERSION = "1.0.0";
+const STC_VERSION = "1.0.1";
 
 // Reihenfolge zählt: genauere Begriffe vor allgemeinen. "=wort" trifft nur ganze Wörter.
 const EK_ICONS = [
@@ -367,6 +367,8 @@ class ShoppingTilesCard extends HTMLElement {
       this._langTimer = setTimeout(() => { this._lang = true; this._bearbeiten(k.dataset.uid); }, 550);
     };
     const stopLang = () => clearTimeout(this._langTimer);
+    // jeder neue Druck beginnt ohne „lange gedrückt“-Merker / every new press starts without the long-press flag
+    r.addEventListener("pointerdown", () => { this._lang = false; }, true);
     for (const g of [this._grid, this._alle]) {
       g.addEventListener("pointerdown", startLang);
       g.addEventListener("pointerup", stopLang);
