@@ -84,6 +84,12 @@ icons:
 - Tiles are made for touch and mouse; keyboard operation is limited.
 - This is a hobby project. Feedback and issues are welcome; please don't expect quick release cycles.
 
+## Support
+
+If the card is useful to you and you'd like to say thanks, you can buy me a coffee – completely optional, feedback is just as welcome.
+
+[![Donate via PayPal](https://img.shields.io/badge/Donate-PayPal-00457C?logo=paypal&logoColor=white)](https://paypal.me/plerzelwupp)
+
 ## Disclaimer
 
 This project is not affiliated with, endorsed by or connected to Bring! Labs AG. "Bring!" is a trademark of its respective owner. No Bring! artwork is used – all icons come from the Material Design Icons set included in Home Assistant.
