@@ -84,6 +84,12 @@ icons:
 - Die Kacheln sind für Finger und Maus gemacht; die Bedienung per Tastatur ist eingeschränkt.
 - Das ist ein Hobbyprojekt. Rückmeldungen und Fehlerberichte sind willkommen; schnelle Updates bitte nicht erwarten.
 
+## Unterstützen
+
+Wenn Dir die Karte gefällt und Du Danke sagen möchtest, kannst Du mir einen Kaffee spendieren – ganz freiwillig, über Rückmeldungen freue ich mich genauso.
+
+[![Spenden über PayPal](https://img.shields.io/badge/Donate-PayPal-00457C?logo=paypal&logoColor=white)](https://paypal.me/plerzelwupp)
+
 ## Hinweis
 
 Dieses Projekt steht in keiner Verbindung zur Bring! Labs AG und wird von ihr weder unterstützt noch empfohlen. „Bring!“ ist eine Marke des jeweiligen Inhabers. Es werden keine Bring!-Grafiken verwendet – alle Symbole stammen aus der in Home Assistant enthaltenen Sammlung Material Design Icons.
