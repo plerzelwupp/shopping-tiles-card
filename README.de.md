@@ -4,6 +4,8 @@ Eine kleine Dashboard-Karte für Home Assistant, die die offenen Artikel einer T
 
 Entstanden ist sie als privates Projekt, um einer Bring!-Einkaufsliste in Home Assistant einen freundlicheren Auftritt zu geben – nur mit den Bordmitteln von Home Assistant.
 
+[![Open your Home Assistant instance and show this repository in the Marketplace.](https://my.home-assistant.io/badges/hacs_repository.svg)](https://my.home-assistant.io/redirect/hacs_repository/?owner=plerzelwupp&repository=shopping-tiles-card&category=plugin)
+
 *English description: [README.md](README.md)*
 
 ![Shopping Tiles Card](images/card-de.png)
@@ -36,7 +38,8 @@ Die Angabe bearbeiten geht nur, wenn die Liste Beschreibungen unterstützt (Brin
 ## Installation
 
 **Marketplace / HACS (eigenes Repository)**
-1. Dieses Repository als eigenes Repository hinzufügen, Typ *Dashboard* (im Marketplace über den Link hinzufügen; bei HACS unter *Benutzerdefinierte Repositories*).
+Am einfachsten über den Knopf oben auf dieser Seite. Oder von Hand:
+1. Dieses Repository als eigenes Repository hinzufügen, Typ *Dashboard* (im Marketplace über den Link hinzufügen – dafür muss im Marketplace ein GitHub-Konto verbunden sein; bei HACS unter *Benutzerdefinierte Repositories*).
 2. *Shopping Tiles Card* installieren und den Browser neu laden.
 
 **Manuell**
@@ -78,6 +81,7 @@ icons:
 - Für einige häufige Artikel gibt es in der Symbolsammlung kein passendes Symbol (Kartoffeln, Tomaten, Butter, Honig, Marmelade, …) – sie bekommen den Einkaufskorb, sofern man keine eigene Zuordnung anlegt.
 - „Zuletzt gekauft“ nutzt die Reihenfolge, in der die Liste erledigte Artikel liefert. Bring! liefert keinen Zeitpunkt mit, die Reihenfolge ist also nur ungefähr.
 - Getestet mit Home Assistant 2026.11 in Chrome unter Windows und auf einem Android-Handy (helles und dunkles Design). Ältere Versionen funktionieren eventuell, sind aber nicht getestet.
+- Die Kacheln sind für Finger und Maus gemacht; die Bedienung per Tastatur ist eingeschränkt.
 - Das ist ein Hobbyprojekt. Rückmeldungen und Fehlerberichte sind willkommen; schnelle Updates bitte nicht erwarten.
 
 ## Hinweis
