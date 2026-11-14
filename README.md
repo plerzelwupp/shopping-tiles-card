@@ -4,6 +4,8 @@ A small Home Assistant dashboard card that shows the open items of a to-do list 
 
 It started as a personal project to give a Bring! shopping list in Home Assistant a friendlier look, using only Home Assistant's own building blocks.
 
+[![Open your Home Assistant instance and show this repository in the Marketplace.](https://my.home-assistant.io/badges/hacs_repository.svg)](https://my.home-assistant.io/redirect/hacs_repository/?owner=plerzelwupp&repository=shopping-tiles-card&category=plugin)
+
 *Deutsche Beschreibung: [README.de.md](README.de.md)*
 
 ![Shopping Tiles Card](images/card-en.png)
@@ -36,7 +38,8 @@ Editing the details only works if the list supports descriptions (Bring! does).
 ## Installation
 
 **Marketplace / HACS (custom repository)**
-1. Add this repository as a custom repository, type *Dashboard* (Marketplace: *Add from link*; HACS: *Custom repositories*).
+Easiest: use the button at the top of this page. Or manually:
+1. Add this repository as a custom repository, type *Dashboard* (Marketplace: *Add from link* – this needs a GitHub account connected in the Marketplace; HACS: *Custom repositories*).
 2. Install *Shopping Tiles Card* and reload the browser.
 
 **Manual**
@@ -78,6 +81,7 @@ icons:
 - The icon set has no matching icon for some common items (potatoes, tomatoes, butter, honey, jam, …) – they get the basket unless you add your own mapping.
 - "Recently bought" uses the order in which the list provides completed items. Bring! does not provide a timestamp, so the order is only approximate.
 - Tested with Home Assistant 2026.11 in Chrome on Windows and on an Android phone (light and dark theme). Older versions may work but have not been tested.
+- Tiles are made for touch and mouse; keyboard operation is limited.
 - This is a hobby project. Feedback and issues are welcome; please don't expect quick release cycles.
 
 ## Disclaimer
