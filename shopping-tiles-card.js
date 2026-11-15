@@ -7,7 +7,7 @@
  *
  * https://github.com/plerzelwupp/shopping-tiles-card – MIT License, (c) 2026 plerzelwupp
  */
-const STC_VERSION = "1.1.0";
+const STC_VERSION = "1.1.1";
 
 // Reihenfolge zählt: genauere Begriffe vor allgemeinen. "=wort" trifft nur ganze Wörter.
 const EK_ICONS = [
@@ -151,7 +151,9 @@ class ShoppingTilesCard extends HTMLElement {
     this._config = { ...config };
     if (!this.shadowRoot) this.attachShadow({ mode: "open" });
     if (alteListe !== this._config.entity) {
-      // andere Liste gewählt: neu abonnieren / other list: subscribe again
+      // andere Liste gewählt: laufende Anmeldung ungültig machen, neu abonnieren
+      // other list: invalidate a pending subscription, subscribe again
+      this._aboNr = (this._aboNr || 0) + 1;
       this._unsubscribe();
       this._items = [];
       this._undoListe = [];
@@ -189,14 +191,31 @@ class ShoppingTilesCard extends HTMLElement {
   _subscribe() {
     if (this._subscribing || !this._hass) return;
     this._subscribing = true;
+    // jede Anmeldung bekommt eine Nummer; veraltete Antworten werden verworfen
+    // every subscription gets a number; stale answers are discarded
+    const nr = this._aboNr = (this._aboNr || 0) + 1;
     this._hass.connection.subscribeMessage(
-      (msg) => { this._fehler = null; this._items = msg.items || []; this._render(); },
+      (msg) => {
+        if (nr !== this._aboNr) return;
+        this._fehler = null; this._items = msg.items || []; this._render();
+      },
       { type: "todo/item/subscribe", entity_id: this._config.entity }
     ).then((unsub) => {
-      this._unsub = unsub; this._subscribing = false;
+      this._subscribing = false;
+      if (nr !== this._aboNr) {
+        // inzwischen andere Liste gewählt / another list was chosen meanwhile
+        unsub();
+        if (this.isConnected && !this._unsub) this._subscribe();
+        return;
+      }
+      this._unsub = unsub;
       if (!this.isConnected) this._unsubscribe();
     }).catch((err) => {
       this._subscribing = false;
+      if (nr !== this._aboNr) {
+        if (this.isConnected && !this._unsub) this._subscribe();
+        return;
+      }
       // Fehler merken, damit _render ihn nicht überschreibt / keep the error so _render does not overwrite it
       this._fehler = `${this._t.error}: ${err.message || err}`;
       this._render();
@@ -406,8 +425,11 @@ class ShoppingTilesCard extends HTMLElement {
       if (!k) return;
       if (e.key === "Enter" || e.key === " ") {
         e.preventDefault();
-        if (e.currentTarget === this._grid && !k.classList.contains("mehr")) {
-          this._fokusIndex = [...this._grid.querySelectorAll(".kachel")].indexOf(k);
+        if (!k.classList.contains("mehr")) {
+          // merken, wo abgehakt wurde, damit der Fokus danach weiterwandert
+          // remember where the item was, so focus can move on afterwards
+          const g = e.currentTarget;
+          this._fokus = { grid: g, uid: k.dataset.uid, index: [...g.querySelectorAll(".kachel")].indexOf(k) };
         }
         this._lang = false;
         klick(e);
@@ -512,7 +534,7 @@ class ShoppingTilesCard extends HTMLElement {
     if (!offen.length) {
       this._grid.innerHTML = `<div class="leer">${t.empty}</div>`;
       this._alle.innerHTML = `<div class="leer">${t.empty}</div>`;
-      this._fokusIndex = null;
+      this._fokusSetzen();
       return;
     }
     const max = Math.max(1, (this._spalten || 4) * this._zeilen());
@@ -528,12 +550,20 @@ class ShoppingTilesCard extends HTMLElement {
         </div>`;
     }
     this._alle.innerHTML = offen.map((i) => this._kachel(i)).join("");
-    // nach Abhaken per Tastatur die nächste Kachel fokussieren / after a keyboard check-off focus the next tile
-    if (this._fokusIndex != null) {
-      const kacheln = this._grid.querySelectorAll(".kachel");
-      if (kacheln.length) kacheln[Math.min(this._fokusIndex, kacheln.length - 1)].focus();
-      this._fokusIndex = null;
-    }
+    this._fokusSetzen();
+  }
+
+  // nach Abhaken per Tastatur die nächste Kachel im selben Bereich fokussieren (Karte oder Fenster)
+  // after a keyboard check-off focus the next tile in the same area (card or dialog)
+  _fokusSetzen() {
+    const f = this._fokus;
+    if (!f) return;
+    const kacheln = [...f.grid.querySelectorAll(".kachel")];
+    // Artikel noch da (Antwort steht aus): weiter warten / item still there (no answer yet): keep waiting
+    if (kacheln.some((k) => k.dataset.uid === f.uid)) return;
+    this._fokus = null;
+    if (kacheln.length) kacheln[Math.min(f.index, kacheln.length - 1)].focus();
+    else if (this._dialog.open) this.shadowRoot.querySelector(".zu").focus();
   }
 
   _renderZuletzt(offen) {
@@ -576,7 +606,10 @@ class ShoppingTilesCard extends HTMLElement {
   _wieder(uid, el) {
     if (!uid) return;
     el.style.opacity = "0.3";
-    this._dienst("update_item", { item: uid, status: "needs_action" }).catch(() => { el.style.opacity = ""; });
+    this._dienst("update_item", { item: uid, status: "needs_action" }).catch(() => {
+      el.style.opacity = "";
+      if (this._fokus?.uid === uid) this._fokus = null;
+    });
   }
 
   // Dienst aufrufen; die Fehlermeldung zeigt HA selbst, die Karte stellt nur die Anzeige zurück
@@ -623,7 +656,8 @@ class ShoppingTilesCard extends HTMLElement {
     this._bDialog.close();
     if (!uid || !i) return;
     const eintrag = { art: "del", uid, summary: i.summary, description: i.description || "" };
-    this._dienst("remove_item", { item: uid }).catch(() => this._undoEntfernen(eintrag));
+    eintrag.loeschen = this._dienst("remove_item", { item: uid });
+    eintrag.loeschen.catch(() => this._undoEntfernen(eintrag));
     this._undoZeigen(eintrag);
   }
 
@@ -638,6 +672,7 @@ class ShoppingTilesCard extends HTMLElement {
     const eintrag = { art: "done", uid, summary: name };
     this._dienst("update_item", { item: uid, status: "completed" }).catch(() => {
       el.style.opacity = "";
+      if (this._fokus?.uid === uid) this._fokus = null;
       this._undoEntfernen(eintrag);
     });
     this._undoZeigen(eintrag);
@@ -688,7 +723,8 @@ class ShoppingTilesCard extends HTMLElement {
         const merkmale = this._hass.states[this._config.entity]?.attributes?.supported_features || 0;
         const daten = { item: x.summary };
         if (x.description && (merkmale & 64)) daten.description = x.description;
-        this._dienst("add_item", daten).catch(() => {});
+        // erst nach bestätigtem Löschen neu anlegen / add again only once the delete is confirmed
+        x.loeschen.then(() => this._dienst("add_item", daten).catch(() => {}), () => {});
       }
     }
     clearTimeout(this._undoTimer);
