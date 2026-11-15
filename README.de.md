@@ -17,7 +17,7 @@ Entstanden ist sie als privates Projekt, um einer Bring!-Einkaufsliste in Home A
 - **Farben nach Bereich** – Obst & Gemüse, Kühlregal, Fleisch & Fisch, Backwaren & Vorrat, Drogerie & Haushalt, Getränke, Süßes & Snacks. Die Farben kommen aus dem Home-Assistant-Design, helles und dunkles Design funktionieren beide.
 - **Antippen hakt ab**, mit kurzem „Rückgängig“ – auch für mehrere schnell abgehakte Artikel auf einmal.
 - **Lange drücken (oder Rechtsklick) zum Bearbeiten** – Name oder Angabe ändern, Artikel löschen (auch das Löschen lässt sich rückgängig machen).
-- **Mit Tastatur und Screenreader bedienbar** – Tab springt von Kachel zu Kachel, Enter oder Leertaste hakt ab, F2 oder die Kontextmenü-Taste öffnet „Bearbeiten“.
+- **Mit Tastatur bedienbar** – Tab springt von Kachel zu Kachel (auch im Fenster mit allen Artikeln), Enter oder Leertaste hakt ab, F2 oder die Kontextmenü-Taste öffnet „Bearbeiten“. Die Kacheln haben Beschriftungen für Screenreader (bisher nicht mit einem Screenreader getestet).
 - **Zuletzt gekauft** – kürzlich abgehakte Artikel erscheinen als kleine Einträge; ein Tipp setzt sie wieder auf die Liste.
 - **„+N weitere“** – passt nicht alles hinein, öffnet die letzte Kachel ein Fenster mit allen offenen und den zuletzt gekauften Artikeln.
 - **Passt ins Sections-Raster** – alle Kacheln sind gleich groß; die Zahl der Kachelreihen richtet sich nach der Kartenhöhe.
@@ -83,7 +83,7 @@ icons:
 - „Zuletzt gekauft“ nutzt die Reihenfolge, in der die Liste erledigte Artikel liefert. Bring! liefert keinen Zeitpunkt mit, die Reihenfolge ist also nur ungefähr.
 - Getestet mit Home Assistant 2026.11 in Chrome unter Windows und auf einem Android-Handy (helles und dunkles Design), mit der Bring!-Integration, Local To-do und der eingebauten Einkaufsliste. Ältere Versionen funktionieren eventuell, sind aber nicht getestet.
 - Lässt sich die Liste nicht lesen (z. B. weil die Entität entfernt wurde), zeigt die Karte den Fehler und versucht es alle 30 Sekunden erneut.
-- Das ist ein Hobbyprojekt. Rückmeldungen und Fehlerberichte sind willkommen; schnelle Updates bitte nicht erwarten.
+- Das ist ein Hobbyprojekt. Rückmeldungen und Fehlerberichte sind willkommen.
 
 ## Unterstützen
 
