@@ -7,7 +7,7 @@
  *
  * https://github.com/plerzelwupp/shopping-tiles-card – MIT License, (c) 2026 plerzelwupp
  */
-const STC_VERSION = "1.1.1";
+const STC_VERSION = "1.2.0";
 
 // Reihenfolge zählt: genauere Begriffe vor allgemeinen. "=wort" trifft nur ganze Wörter.
 const EK_ICONS = [
@@ -270,13 +270,16 @@ class ShoppingTilesCard extends HTMLElement {
         .kreis { width:38px; height:38px; flex:none; border-radius:50%; display:flex; align-items:center; justify-content:center;
                  background: rgba(var(--k-rgb), 0.18); }
         .kreis ha-icon { --mdc-icon-size: 22px; color: rgb(var(--k-rgb)); }
-        .kachel.zuletzt { opacity: 0.75; }
+        .kachel.zuletzt { opacity: 0.75; position: relative; }
+        .kachel .zurueck { position:absolute; top:6px; right:6px; --mdc-icon-size: 16px; color: var(--secondary-text-color); }
         .mehr { background: rgba(var(--rgb-primary-color, 3,169,244), 0.15); color: var(--primary-color); }
         .mehr .plus { font-size: 24px; font-weight: 500; }
         .name { font-size: 13px; font-weight: 500; margin-top: 6px; line-height: 1.2; max-width:100%;
                 overflow:hidden; display:-webkit-box; -webkit-line-clamp:2; -webkit-box-orient:vertical; hyphens:auto; overflow-wrap:anywhere; }
         .info { font-size: 11px; color: var(--secondary-text-color); margin-top: 2px; line-height: 1.2; max-width:100%;
                 white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+        .zt-bereich[hidden] { display:none; }
+        .zt-titel { font-size:12px; line-height:14px; color: var(--secondary-text-color); margin: 8px 0 4px; }
         .leer { grid-column: 1 / -1; color: var(--secondary-text-color); text-align:center; padding: 12px 0; }
         .undo { display:none; font-size:12px; color: var(--secondary-text-color); white-space:nowrap; }
         .undo button { font: inherit; background:none; border:none; padding:0; color: var(--primary-color); cursor:pointer; margin-left:6px; }
@@ -321,6 +324,10 @@ class ShoppingTilesCard extends HTMLElement {
           <span class="titel">${this._config.show_title === false ? "" : ekEsc(this._titel)}</span>
         </div>
         <div class="grid haupt"><div class="leer">${t.loading}</div></div>
+        <div class="zt-bereich" hidden>
+          <div class="zt-titel">${t.recentTitle}</div>
+          <div class="grid zuletzt-haupt"></div>
+        </div>
         <div class="status">
           <button type="button" class="zahl" title="${t.showAll}"></button>
           <div class="undo" role="status"><span class="undotext"></span><button type="button">${t.undo}</button></div>
@@ -371,6 +378,8 @@ class ShoppingTilesCard extends HTMLElement {
     this._chips = r.querySelector(".chips");
     this._zuletztAlle = r.querySelector(".zuletzt-alle");
     this._zuletztTitel = r.querySelector(".zuletzt-titel");
+    this._ztBereich = r.querySelector(".zt-bereich");
+    this._ztGrid = r.querySelector(".zuletzt-haupt");
     const klick = (e) => {
       if (this._lang) { this._lang = false; return; }
       if (e.target.closest(".mehr")) { this._oeffnen(); return; }
@@ -382,6 +391,7 @@ class ShoppingTilesCard extends HTMLElement {
     this._grid.addEventListener("click", klick);
     this._alle.addEventListener("click", klick);
     this._zuletztAlle.addEventListener("click", klick);
+    this._ztGrid.addEventListener("click", klick);
     this._chips.addEventListener("click", klick);
     this._zahl.addEventListener("click", () => this._oeffnen());
     r.querySelector(".zu").addEventListener("click", () => this._dialog.close());
@@ -439,7 +449,7 @@ class ShoppingTilesCard extends HTMLElement {
         this._bearbeiten(k.dataset.uid);
       }
     };
-    for (const g of [this._grid, this._alle, this._zuletztAlle]) g.addEventListener("keydown", taste);
+    for (const g of [this._grid, this._alle, this._zuletztAlle, this._ztGrid]) g.addEventListener("keydown", taste);
     // nach dem Schließen von „Bearbeiten“ zurück zur Kachel / back to the tile after closing "edit"
     this._bDialog.addEventListener("close", () => {
       const uid = this._fokusUid;
@@ -461,8 +471,9 @@ class ShoppingTilesCard extends HTMLElement {
     this._ro = new ResizeObserver(() => {
       const sp = this._messen();
       const ze = this._hoeheMessen();
-      if (sp !== this._spalten || ze !== this._gemessen) {
-        this._spalten = sp; this._gemessen = ze; this._render();
+      const frei = this._freiMess || 0;
+      if (sp !== this._spalten || ze !== this._gemessen || Math.abs(frei - (this._frei || 0)) > 4) {
+        this._spalten = sp; this._gemessen = ze; this._frei = frei; this._render();
       } else this._chipsKuerzen();
     });
     this._ro.observe(this._grid);
@@ -486,6 +497,7 @@ class ShoppingTilesCard extends HTMLElement {
   _hoeheMessen() {
     // Platz für Kacheln messen, wenn die Karte eine feste Höhe hat (sonst Rechnung als Rückfall)
     // measure the space for tiles when the card has a fixed height (otherwise fall back to the calculation)
+    this._freiMess = 0;
     if (typeof this._config.grid_options?.rows !== "number") return 0;
     const r = this.shadowRoot;
     const karte = r.querySelector("ha-card");
@@ -497,6 +509,7 @@ class ShoppingTilesCard extends HTMLElement {
     const kopfH = kopf && getComputedStyle(kopf).display !== "none" ? kopf.getBoundingClientRect().height + 12 : 0;
     const formH = r.querySelector("ha-card form")?.getBoundingClientRect().height || 38;
     const frei = h - innen - kopfH - formH - 32;
+    this._freiMess = frei;
     return Math.max(1, Math.floor((frei + 8) / 108));
   }
 
@@ -515,6 +528,7 @@ class ShoppingTilesCard extends HTMLElement {
       <div class="kachel${zuletzt ? " zuletzt" : ""}" role="button" tabindex="0" lang="${this._t === EK_TEXT.de ? "de" : "en"}" data-uid="${ekEsc(i.uid)}" data-name="${ekEsc(name)}"
            aria-label="${ekEsc(name)}${i.description ? ", " + ekEsc(i.description) : ""}" aria-description="${zuletzt ? this._t.readd : this._t.keys}"
            title="${ekEsc(name)}${i.description ? " – " + ekEsc(i.description) : ""} (${hinweis})">
+        ${zuletzt ? `<ha-icon class="zurueck" icon="mdi:restore"></ha-icon>` : ""}
         <div class="kreis" style="--k-rgb: ${ekFarbe(icon)}"><ha-icon icon="${ekEsc(icon)}"></ha-icon></div>
         <div class="name">${ekEsc(name)}</div>
         ${i.description ? `<div class="info">${ekEsc(i.description)}</div>` : ""}
@@ -531,13 +545,15 @@ class ShoppingTilesCard extends HTMLElement {
     const offen = this._items.filter((i) => i.status === "needs_action");
     this._zahl.textContent = t.open(offen.length);
     this._renderZuletzt(offen);
+    const { reihen, ztReihen } = this._aufteilung(offen.length);
+    this._renderZuletztKacheln(ztReihen);
     if (!offen.length) {
       this._grid.innerHTML = `<div class="leer">${t.empty}</div>`;
       this._alle.innerHTML = `<div class="leer">${t.empty}</div>`;
       this._fokusSetzen();
       return;
     }
-    const max = Math.max(1, (this._spalten || 4) * this._zeilen());
+    const max = Math.max(1, (this._spalten || 4) * reihen);
     if (offen.length <= max || max < 2) {
       this._grid.innerHTML = offen.slice(0, max).map((i) => this._kachel(i)).join("");
     } else {
@@ -566,6 +582,36 @@ class ShoppingTilesCard extends HTMLElement {
     else if (this._dialog.open) this.shadowRoot.querySelector(".zu").focus();
   }
 
+  // Kachelreihen auf offene und zuletzt gekaufte Artikel aufteilen
+  // split the rows of tiles between open and recently bought items
+  // recent_style: "auto" = Kacheln nur, wenn nach allen offenen Artikeln Platz bleibt / tiles only if space is left
+  //               "tiles" = immer mindestens eine Reihe / always at least one row, "chips" = nur Chips / chips only
+  _aufteilung(anzahl) {
+    const zeilen = this._zeilen();
+    const stil = this._config.recent_style || "auto";
+    if (this._config.show_recent === false || !this._zuletzt?.length || stil === "chips") {
+      return { reihen: zeilen, ztReihen: 0 };
+    }
+    const sp = this._spalten || 4;
+    const benoetigt = Math.max(1, Math.ceil(anzahl / sp));
+    const frei = this._frei || 0;
+    // Höhe: Kachelreihen je 100 px + 8 px Abstand, Überschrift 26 px / tile rows 100 px + 8 px gap, heading 26 px
+    const rest = (k) => Math.floor((frei - (k * 108 - 8) - 26 + 8) / 108);
+    if (!frei) return stil === "tiles" ? { reihen: zeilen, ztReihen: 1 } : { reihen: zeilen, ztReihen: 0 };
+    let k = Math.max(1, Math.min(benoetigt, zeilen));
+    if (stil === "tiles") while (k > 1 && rest(k) < 1) k--;
+    return { reihen: k, ztReihen: Math.max(0, rest(k)) };
+  }
+
+  _renderZuletztKacheln(ztReihen) {
+    const anzahl = ztReihen * (this._spalten || 4);
+    const liste = (this._zuletzt || []).slice(0, anzahl);
+    this._ztBereich.hidden = !liste.length;
+    this._ztGrid.innerHTML = liste.map((i) => this._kachel(i, true)).join("");
+    // Kacheln ersetzen die Chips / tiles replace the chips
+    if (liste.length) this._chips.classList.add("aus");
+  }
+
   _renderZuletzt(offen) {
     // zuletzt erledigte Artikel, ohne Doppelte und ohne gerade offene
     // recently completed items, without duplicates and without currently open ones
@@ -583,6 +629,7 @@ class ShoppingTilesCard extends HTMLElement {
         if (zuletzt.length >= 24) break;
       }
     }
+    this._zuletzt = zuletzt;
     this._chips.classList.toggle("aus", !zuletzt.length);
     this._chips.innerHTML = zuletzt.length ? `<span class="etikett">${t.recent}</span>` + zuletzt.slice(0, 10).map((i) => `
       <button type="button" class="chip" data-uid="${ekEsc(i.uid)}" title="${ekEsc(ekGross(i.summary))} – ${t.readd}">
@@ -744,9 +791,11 @@ class ShoppingTilesCard extends HTMLElement {
 // Grafischer Editor / visual editor
 const EK_EDITOR_TEXT = {
   de: { entity: "Einkaufsliste (To-do-Liste)", rows: "Kachelreihen", rowsAuto: "Automatisch (nach Kartenhöhe)", show_recent: "Zuletzt gekaufte Artikel anzeigen", show_title: "Titel in der Karte anzeigen",
+        recent_style: "Zuletzt gekaufte als", styleAuto: "Automatisch (Kacheln, wenn Platz frei ist)", styleChips: "Chips (eine Zeile)", styleTiles: "Kacheln",
         title: "Titel", language: "Sprache", auto: "Automatisch (wie HA)",
         hint: "Eigene Symbole (icons) lassen sich im YAML-Modus festlegen." },
   en: { entity: "Shopping list (to-do list)", rows: "Rows of tiles", rowsAuto: "Automatic (from card height)", show_recent: "Show recently bought items", show_title: "Show title in card",
+        recent_style: "Show recently bought as", styleAuto: "Automatic (tiles when there is free space)", styleChips: "Chips (one line)", styleTiles: "Tiles",
         title: "Title", language: "Language", auto: "Automatic (same as HA)",
         hint: "Custom icons (icons) can be set in YAML mode." },
 };
@@ -776,6 +825,9 @@ class ShoppingTilesCardEditor extends HTMLElement {
         { value: "auto", label: x.rowsAuto }, ...[1, 2, 3, 4, 5].map((n) => ({ value: String(n), label: String(n) })),
       ] } } },
       { name: "show_recent", selector: { boolean: {} } },
+      { name: "recent_style", selector: { select: { mode: "dropdown", options: [
+        { value: "auto", label: x.styleAuto }, { value: "chips", label: x.styleChips }, { value: "tiles", label: x.styleTiles },
+      ] } } },
       { name: "show_title", selector: { boolean: {} } },
       { name: "title", selector: { text: {} } },
       { name: "language", selector: { select: { mode: "dropdown", options: [
@@ -798,7 +850,7 @@ class ShoppingTilesCardEditor extends HTMLElement {
     this._form.hass = this._hass;
     this._form.schema = this._schema();
     this._form.data = {
-      show_title: true, show_recent: true, language: "auto", title: "",
+      show_title: true, show_recent: true, recent_style: "auto", language: "auto", title: "",
       ...this._config,
       rows: this._config.rows === undefined ? "auto" : String(this._config.rows),
     };
@@ -810,6 +862,7 @@ class ShoppingTilesCardEditor extends HTMLElement {
     if (!neu.title) delete neu.title;
     if (neu.show_title !== false) delete neu.show_title;
     if (neu.show_recent !== false) delete neu.show_recent;
+    if (!neu.recent_style || neu.recent_style === "auto") delete neu.recent_style;
     if (!neu.rows || neu.rows === "auto") delete neu.rows;
     else neu.rows = Number(neu.rows);
     this._config = neu;
