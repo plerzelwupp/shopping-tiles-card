@@ -18,7 +18,7 @@ Entstanden ist sie als privates Projekt, um einer Bring!-Einkaufsliste in Home A
 - **Antippen hakt ab**, mit kurzem „Rückgängig“ – auch für mehrere schnell abgehakte Artikel auf einmal.
 - **Lange drücken (oder Rechtsklick) zum Bearbeiten** – Name oder Angabe ändern, Artikel löschen (auch das Löschen lässt sich rückgängig machen).
 - **Mit Tastatur bedienbar** – Tab springt von Kachel zu Kachel (auch im Fenster mit allen Artikeln), Enter oder Leertaste hakt ab, F2 oder die Kontextmenü-Taste öffnet „Bearbeiten“. Die Kacheln haben Beschriftungen für Screenreader (bisher nicht mit einem Screenreader getestet).
-- **Zuletzt gekauft** – kürzlich abgehakte Artikel erscheinen als kleine Einträge; ein Tipp setzt sie wieder auf die Liste. Bei einer hohen Karte (z. B. auf einem Wandbildschirm) werden freie Reihen stattdessen mit Kacheln der zuletzt gekauften Artikel gefüllt (mit kleinem ↺ markiert).
+- **Zuletzt gekauft** – kürzlich abgehakte Artikel erscheinen als kleine Einträge; ein Tipp setzt sie wieder auf die Liste. Bei einer hohen Karte (z. B. auf einem Wandbildschirm oder in einer Vollbild-Ansicht) werden freie Reihen stattdessen mit Kacheln der zuletzt gekauften Artikel gefüllt (mit kleinem ↺ markiert).
 - **„+N weitere“** – passt nicht alles hinein, öffnet die letzte Kachel ein Fenster mit allen offenen und den zuletzt gekauften Artikeln.
 - **Passt ins Sections-Raster** – alle Kacheln sind gleich groß; die Zahl der Kachelreihen richtet sich nach der Kartenhöhe.
 - **Artikel hinzufügen** direkt in der Karte.
