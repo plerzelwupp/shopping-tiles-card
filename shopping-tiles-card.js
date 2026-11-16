@@ -7,7 +7,7 @@
  *
  * https://github.com/plerzelwupp/shopping-tiles-card – MIT License, (c) 2026 plerzelwupp
  */
-const STC_VERSION = "1.2.0";
+const STC_VERSION = "1.2.1";
 
 // Reihenfolge zählt: genauere Begriffe vor allgemeinen. "=wort" trifft nur ganze Wörter.
 const EK_ICONS = [
@@ -279,7 +279,12 @@ class ShoppingTilesCard extends HTMLElement {
         .info { font-size: 11px; color: var(--secondary-text-color); margin-top: 2px; line-height: 1.2; max-width:100%;
                 white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
         .zt-bereich[hidden] { display:none; }
-        .zt-titel { font-size:12px; line-height:14px; color: var(--secondary-text-color); margin: 8px 0 4px; }
+        /* mit Kacheln: „X offen“ direkt unter den offenen Artikeln, dann Trennlinie und „Zuletzt gekauft“
+           with tiles: "X open" right below the open items, then a divider and "recently bought" */
+        .zt-bereich { flex:1; min-height:0; margin-top:8px; border-top:1px solid var(--divider-color); }
+        .zt-titel { font-size:12px; line-height:14px; color: var(--secondary-text-color); margin: 6px 0 4px; }
+        ha-card.mit-zt .status { flex:none; margin-top:8px; min-height:24px; }
+        ha-card.mit-zt form { margin-top:8px; }
         .leer { grid-column: 1 / -1; color: var(--secondary-text-color); text-align:center; padding: 12px 0; }
         .undo { display:none; font-size:12px; color: var(--secondary-text-color); white-space:nowrap; }
         .undo button { font: inherit; background:none; border:none; padding:0; color: var(--primary-color); cursor:pointer; margin-left:6px; }
@@ -324,14 +329,14 @@ class ShoppingTilesCard extends HTMLElement {
           <span class="titel">${this._config.show_title === false ? "" : ekEsc(this._titel)}</span>
         </div>
         <div class="grid haupt"><div class="leer">${t.loading}</div></div>
-        <div class="zt-bereich" hidden>
-          <div class="zt-titel">${t.recentTitle}</div>
-          <div class="grid zuletzt-haupt"></div>
-        </div>
         <div class="status">
           <button type="button" class="zahl" title="${t.showAll}"></button>
           <div class="undo" role="status"><span class="undotext"></span><button type="button">${t.undo}</button></div>
           <div class="chips aus"></div>
+        </div>
+        <div class="zt-bereich" hidden>
+          <div class="zt-titel">${t.recentTitle}</div>
+          <div class="grid zuletzt-haupt"></div>
         </div>
         <form>
           <input type="text" placeholder="${t.add}" aria-label="${t.add}">
@@ -497,8 +502,10 @@ class ShoppingTilesCard extends HTMLElement {
   _hoeheMessen() {
     // Platz für Kacheln messen, wenn die Karte eine feste Höhe hat (sonst Rechnung als Rückfall)
     // measure the space for tiles when the card has a fixed height (otherwise fall back to the calculation)
+    // gilt auch ohne feste Rasterhöhe (z. B. Vollbild-Ansicht); bei Höhe nach Inhalt verteilt die Karte
+    // nur den Platz, den sie schon hat, und wächst dadurch nicht / also without a fixed grid height (e.g.
+    // panel view); with content-based height the card only shares out the space it already has
     this._freiMess = 0;
-    if (typeof this._config.grid_options?.rows !== "number") return 0;
     const r = this.shadowRoot;
     const karte = r.querySelector("ha-card");
     const h = karte?.getBoundingClientRect().height || 0;
@@ -595,8 +602,9 @@ class ShoppingTilesCard extends HTMLElement {
     const sp = this._spalten || 4;
     const benoetigt = Math.max(1, Math.ceil(anzahl / sp));
     const frei = this._frei || 0;
-    // Höhe: Kachelreihen je 100 px + 8 px Abstand, Überschrift 26 px / tile rows 100 px + 8 px gap, heading 26 px
-    const rest = (k) => Math.floor((frei - (k * 108 - 8) - 26 + 8) / 108);
+    // Höhe: Kachelreihen je 100 px + 8 px Abstand; Bereich „Zuletzt gekauft“ mit Linie, Überschrift und
+    // Abstand zum Eingabefeld 42 px / tile rows 100 px + 8 px gap; recent section incl. divider, heading, gap 42 px
+    const rest = (k) => Math.floor((frei - (k * 108 - 8) - 42 + 8) / 108);
     if (!frei) return stil === "tiles" ? { reihen: zeilen, ztReihen: 1 } : { reihen: zeilen, ztReihen: 0 };
     let k = Math.max(1, Math.min(benoetigt, zeilen));
     if (stil === "tiles") while (k > 1 && rest(k) < 1) k--;
@@ -607,6 +615,7 @@ class ShoppingTilesCard extends HTMLElement {
     const anzahl = ztReihen * (this._spalten || 4);
     const liste = (this._zuletzt || []).slice(0, anzahl);
     this._ztBereich.hidden = !liste.length;
+    this.shadowRoot.querySelector("ha-card").classList.toggle("mit-zt", !!liste.length);
     this._ztGrid.innerHTML = liste.map((i) => this._kachel(i, true)).join("");
     // Kacheln ersetzen die Chips / tiles replace the chips
     if (liste.length) this._chips.classList.add("aus");
