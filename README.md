@@ -18,7 +18,7 @@ It started as a personal project to give a Bring! shopping list in Home Assistan
 - **Tap to check off**, with a short "Undo" – it also covers several quick check-offs at once.
 - **Long press (or right-click) to edit** – rename, change the details or delete an item (deleting can be undone too).
 - **Keyboard support** – Tab moves between tiles (also in the "all items" dialog), Enter or Space checks off, F2 or the context menu key opens "Edit". Tiles carry labels for screen readers (not yet tested with a screen reader).
-- **Recently bought** – recently checked-off items appear as small chips; one tap puts them back on the list. On a tall card (e.g. a wall display), free rows are filled with "recently bought" tiles instead (marked with a small ↺).
+- **Recently bought** – recently checked-off items appear as small chips; one tap puts them back on the list. On a tall card (e.g. a wall display or a full-screen panel view), free rows are filled with "recently bought" tiles instead (marked with a small ↺).
 - **"+N more"** – if not everything fits, the last tile opens a pop-up with all open items and the recently bought ones.
 - **Fits the sections grid** – all tiles have the same size; the number of tile rows follows the card's height.
 - **Add items** directly in the card.
