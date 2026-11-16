@@ -7,7 +7,7 @@
  *
  * https://github.com/plerzelwupp/shopping-tiles-card – MIT License, (c) 2026 plerzelwupp
  */
-const STC_VERSION = "1.2.1";
+const STC_VERSION = "1.2.2";
 
 // Reihenfolge zählt: genauere Begriffe vor allgemeinen. "=wort" trifft nur ganze Wörter.
 const EK_ICONS = [
@@ -96,7 +96,7 @@ const EK_TEXT = {
     title: "Einkaufsliste", open: (n) => `${n} offen`, more: "weitere", showAll: "Alle anzeigen",
     showAllItems: "Alle offenen Artikel anzeigen", allOpen: "alle offenen", add: "Artikel hinzufügen", addBtn: "Hinzufügen",
     undo: "Rückgängig", done: (n) => `„${n}“ abgehakt.`, empty: "Alles eingekauft 🎉", loading: "Lade …",
-    error: "Liste nicht lesbar", close: "Schließen", tap: "Antippen zum Abhaken",
+    error: "Liste nicht lesbar", unavailable: "Liste nicht verfügbar", close: "Schließen", tap: "Antippen zum Abhaken",
     needEntity: "Bitte eine todo-Entität angeben (z. B. todo.zuhause)",
     recent: "Zuletzt:", recentTitle: "Zuletzt gekauft", readd: "Antippen, um wieder auf die Liste zu setzen",
     hold: "lange drücken zum Bearbeiten", edit: "Artikel bearbeiten", name: "Name", desc: "Angabe (z. B. 1 kg, Bio)",
@@ -108,7 +108,7 @@ const EK_TEXT = {
     title: "Shopping list", open: (n) => `${n} open`, more: "more", showAll: "Show all",
     showAllItems: "Show all open items", allOpen: "all open", add: "Add item", addBtn: "Add",
     undo: "Undo", done: (n) => `“${n}” checked off.`, empty: "All done 🎉", loading: "Loading …",
-    error: "Could not read the list", close: "Close", tap: "Tap to check off",
+    error: "Could not read the list", unavailable: "List not available", close: "Close", tap: "Tap to check off",
     needEntity: "Please set a todo entity (e.g. todo.shopping_list)",
     recent: "Recent:", recentTitle: "Recently bought", readd: "Tap to add it to the list again",
     hold: "long press to edit", edit: "Edit item", name: "Name", desc: "Details (e.g. 1 kg, organic)",
@@ -155,16 +155,17 @@ class ShoppingTilesCard extends HTMLElement {
       // other list: invalidate a pending subscription, subscribe again
       this._aboNr = (this._aboNr || 0) + 1;
       this._unsubscribe();
-      this._items = [];
+      this._items = null;
       this._undoListe = [];
       this._fehler = null;
+      this._weg = undefined;
     }
     this._built = false;
     if (this._hass) {
       // Änderungen sofort zeigen (z. B. Vorschau im Editor) / apply changes right away
       this._build();
       this._render();
-      if (!this._unsub) this._subscribe();
+      this._abo();
     }
   }
 
@@ -172,11 +173,29 @@ class ShoppingTilesCard extends HTMLElement {
     const first = !this._hass;
     this._hass = hass;
     if (!this._built) this._build();
-    if (first || !this._unsub) this._subscribe();
+    this._abo();
+  }
+
+  // Liste da und verfügbar? Sonst Karte sperren; kommt sie wieder, neu anmelden – nach dem Neuladen einer
+  // Integration (z. B. Bring!) bleibt die alte Anmeldung stumm, ohne Fehler
+  // list present and available? Otherwise lock the card; when it returns, subscribe again – after an
+  // integration reload (e.g. Bring!) the old subscription stays silent, without an error
+  _abo() {
+    const st = this._hass.states[this._config.entity];
+    const weg = !st || st.state === "unavailable";
+    if (weg !== this._weg) {
+      const zurueck = this._weg === true;
+      this._weg = weg;
+      this._aboNr = (this._aboNr || 0) + 1;
+      this._unsubscribe();
+      clearTimeout(this._retryTimer);
+      if (weg || zurueck) { this._items = null; this._fehler = null; this._render(); }
+    }
+    if (!weg && !this._unsub && !this._subscribing) this._subscribe();
   }
 
   connectedCallback() {
-    if (this._hass && !this._unsub) this._subscribe();
+    if (this._hass) this._abo();
     if (this._ro && this._grid) {
       this._ro.observe(this._grid);
       this._ro.observe(this.shadowRoot.querySelector("ha-card"));
@@ -189,7 +208,7 @@ class ShoppingTilesCard extends HTMLElement {
   }
 
   _subscribe() {
-    if (this._subscribing || !this._hass) return;
+    if (this._subscribing || !this._hass || this._weg) return;
     this._subscribing = true;
     // jede Anmeldung bekommt eine Nummer; veraltete Antworten werden verworfen
     // every subscription gets a number; stale answers are discarded
@@ -221,7 +240,7 @@ class ShoppingTilesCard extends HTMLElement {
       this._render();
       // nach 30 s erneut versuchen, solange die Karte angezeigt wird / retry after 30 s while the card is shown
       clearTimeout(this._retryTimer);
-      this._retryTimer = setTimeout(() => { if (this.isConnected && !this._unsub) this._subscribe(); }, 30000);
+      this._retryTimer = setTimeout(() => { if (this.isConnected && !this._unsub) this._abo(); }, 30000);
     });
   }
 
@@ -285,6 +304,9 @@ class ShoppingTilesCard extends HTMLElement {
         .zt-titel { font-size:12px; line-height:14px; color: var(--secondary-text-color); margin: 6px 0 4px; }
         ha-card.mit-zt .status { flex:none; margin-top:8px; min-height:24px; }
         ha-card.mit-zt form { margin-top:8px; }
+        /* gesperrt (Fehler, nicht verfügbar, lädt): nur die Meldung, keine alten Daten / locked: message only, no stale data */
+        ha-card.gesperrt .status > *, ha-card.gesperrt .zt-bereich { visibility:hidden; }
+        form button[type=submit]:disabled, input:disabled { opacity:.5; cursor:default; }
         .leer { grid-column: 1 / -1; color: var(--secondary-text-color); text-align:center; padding: 12px 0; }
         .undo { display:none; font-size:12px; color: var(--secondary-text-color); white-space:nowrap; }
         .undo button { font: inherit; background:none; border:none; padding:0; color: var(--primary-color); cursor:pointer; margin-left:6px; }
@@ -326,7 +348,7 @@ class ShoppingTilesCard extends HTMLElement {
       <ha-card>
         <div class="kopf ${this._config.show_title === false ? "aus" : ""}">
           ${this._config.show_title === false ? "" : `<ha-icon icon="mdi:cart-outline"></ha-icon>`}
-          <span class="titel">${this._config.show_title === false ? "" : ekEsc(this._titel)}</span>
+          ${this._config.show_title === false ? "" : `<span class="titel" role="heading" aria-level="2">${ekEsc(this._titel)}</span>`}
         </div>
         <div class="grid haupt"><div class="leer">${t.loading}</div></div>
         <div class="status">
@@ -343,10 +365,10 @@ class ShoppingTilesCard extends HTMLElement {
           <button type="submit" aria-label="${t.addBtn}"><ha-icon icon="mdi:plus"></ha-icon></button>
         </form>
       </ha-card>
-      <dialog>
+      <dialog aria-labelledby="stc-alle-titel">
         <div class="kopf">
           <ha-icon icon="mdi:cart-outline"></ha-icon>
-          <span class="titel">${ekEsc(this._titel)} – ${t.allOpen}</span>
+          <span class="titel" id="stc-alle-titel">${ekEsc(this._titel)} – ${t.allOpen}</span>
           <button class="zu" aria-label="${t.close}"><ha-icon icon="mdi:close"></ha-icon></button>
         </div>
         <div class="inhalt">
@@ -355,10 +377,10 @@ class ShoppingTilesCard extends HTMLElement {
           <div class="grid zuletzt-alle"></div>
         </div>
       </dialog>
-      <dialog class="bearbeiten">
+      <dialog class="bearbeiten" aria-labelledby="stc-bearb-titel">
         <div class="kopf">
           <ha-icon icon="mdi:pencil-outline"></ha-icon>
-          <span class="titel">${t.edit}</span>
+          <span class="titel" id="stc-bearb-titel">${t.edit}</span>
         </div>
         <form class="bform">
           <label for="bname">${t.name}</label>
@@ -545,8 +567,10 @@ class ShoppingTilesCard extends HTMLElement {
   _render() {
     if (!this._grid) return;
     const t = this._t;
-    if (this._fehler) {
-      this._grid.innerHTML = `<div class="leer">${ekEsc(this._fehler)}</div>`;
+    const sperre = this._fehler || (this._weg ? t.unavailable : null) || (!this._items ? t.loading : null);
+    this._sperren(!!sperre);
+    if (sperre) {
+      this._grid.innerHTML = `<div class="leer">${ekEsc(sperre)}</div>`;
       return;
     }
     const offen = this._items.filter((i) => i.status === "needs_action");
@@ -574,6 +598,24 @@ class ShoppingTilesCard extends HTMLElement {
     }
     this._alle.innerHTML = offen.map((i) => this._kachel(i)).join("");
     this._fokusSetzen();
+  }
+
+  // Karte sperren, solange die Liste nicht lesbar ist: alte Daten, Fenster und Rückgängig weg, Eingabe aus
+  // lock the card while the list cannot be read: stale data, dialogs and undo gone, input disabled
+  _sperren(an) {
+    const r = this.shadowRoot;
+    r.querySelector("ha-card").classList.toggle("gesperrt", an);
+    r.querySelectorAll("form input, form button").forEach((x) => { x.disabled = an; });
+    if (!an) return;
+    r.querySelector("ha-card").classList.remove("mit-zt");
+    this._ztBereich.hidden = true;
+    for (const g of [this._alle, this._zuletztAlle, this._ztGrid, this._chips]) g.innerHTML = "";
+    this._chips.classList.add("aus");
+    this._zahl.textContent = "";
+    if (this._dialog.open) this._dialog.close();
+    if (this._bDialog.open) this._bDialog.close();
+    this._fokus = null;
+    if (this._undoListe?.length) { clearTimeout(this._undoTimer); this._undoEnde(); }
   }
 
   // nach Abhaken per Tastatur die nächste Kachel im selben Bereich fokussieren (Karte oder Fenster)
@@ -679,7 +721,7 @@ class ShoppingTilesCard extends HTMLElement {
   }
 
   _bearbeiten(uid) {
-    const i = this._items.find((x) => x.uid === uid);
+    const i = (this._items || []).find((x) => x.uid === uid);
     if (!i || this._bDialog.open) return;
     this._vibrieren("medium");
     this._bUid = uid;
@@ -694,7 +736,7 @@ class ShoppingTilesCard extends HTMLElement {
 
   _speichern() {
     const r = this.shadowRoot;
-    const i = this._items.find((x) => x.uid === this._bUid);
+    const i = (this._items || []).find((x) => x.uid === this._bUid);
     const name = r.querySelector("#bname").value.trim();
     const desc = r.querySelector("#bdesc").value.trim();
     if (!i || !name) return;
@@ -707,7 +749,7 @@ class ShoppingTilesCard extends HTMLElement {
 
   _loeschen() {
     const uid = this._bUid;
-    const i = this._items.find((x) => x.uid === uid);
+    const i = (this._items || []).find((x) => x.uid === uid);
     this._fokusUid = null;
     this._bDialog.close();
     if (!uid || !i) return;
