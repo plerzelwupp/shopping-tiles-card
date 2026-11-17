@@ -7,7 +7,7 @@
  *
  * https://github.com/plerzelwupp/shopping-tiles-card – MIT License, (c) 2026 plerzelwupp
  */
-const STC_VERSION = "1.4.1";
+const STC_VERSION = "1.5.0";
 
 // Reihenfolge zählt: genauere Begriffe vor allgemeinen. "=wort" trifft nur ganze Wörter.
 const EK_ICONS = [
@@ -131,10 +131,12 @@ const EK_TEXT = {
     undo: "Rückgängig", done: (n) => `„${n}“ abgehakt.`, empty: "Alles eingekauft 🎉", loading: "Lade …",
     error: "Liste nicht lesbar", unavailable: "Liste nicht verfügbar", close: "Schließen", tap: "Antippen zum Abhaken",
     needEntity: "Bitte eine todo-Entität angeben (z. B. todo.zuhause)",
+    needFavEntity: "favorites_entity muss eine todo-Entität sein (z. B. todo.favoriten)",
     recent: "Zuletzt:", recentTitle: "Zuletzt gekauft", readd: "Antippen, um wieder auf die Liste zu setzen",
     favTitle: "Favoriten", favAdd: "Antippen, um auf die Liste zu setzen",
+    favAddBtn: "Zu Favoriten hinzufügen", favRemove: "Aus Favoriten entfernen", favItem: "Favorit", favFail: "Favoriten-Liste nicht erreichbar",
     hold: "lange drücken zum Bearbeiten", edit: "Artikel bearbeiten", name: "Name", desc: "Angabe (z. B. 1 kg, Bio)",
-    save: "Speichern", del: "Löschen", cancel: "Abbrechen",
+    save: "Speichern", del: "Löschen", cancel: "Abbrechen", saveFail: "Speichern nicht möglich", undoFail: "Rückgängig hat nicht geklappt",
     deleted: (n) => `„${n}“ gelöscht.`, doneN: (n) => `${n} Artikel abgehakt.`, changes: (n) => `${n} Änderungen.`,
     keys: "Enter: abhaken, F2 oder Kontextmenü-Taste: bearbeiten",
   },
@@ -144,10 +146,12 @@ const EK_TEXT = {
     undo: "Undo", done: (n) => `“${n}” checked off.`, empty: "All done 🎉", loading: "Loading …",
     error: "Could not read the list", unavailable: "List not available", close: "Close", tap: "Tap to check off",
     needEntity: "Please set a todo entity (e.g. todo.shopping_list)",
+    needFavEntity: "favorites_entity must be a todo entity (e.g. todo.favorites)",
     recent: "Recent:", recentTitle: "Recently bought", readd: "Tap to add it to the list again",
     favTitle: "Favorites", favAdd: "Tap to add it to the list",
+    favAddBtn: "Add to favorites", favRemove: "Remove from favorites", favItem: "Favorite", favFail: "Favorites list not reachable",
     hold: "long press to edit", edit: "Edit item", name: "Name", desc: "Details (e.g. 1 kg, organic)",
-    save: "Save", del: "Delete", cancel: "Cancel",
+    save: "Save", del: "Delete", cancel: "Cancel", saveFail: "Could not save", undoFail: "Undo failed",
     deleted: (n) => `“${n}” deleted.`, doneN: (n) => `${n} items checked off.`, changes: (n) => `${n} changes.`,
     keys: "Enter: check off, F2 or context menu key: edit",
   },
@@ -221,6 +225,9 @@ const ekFarbe = (icon) => {
   return b ? `var(--rgb-${b[0]}-color, ${b[1]})` : "var(--rgb-grey-color, 158,158,158)";
 };
 
+// alle Stichworte in Suchreihenfolge, einmal angelegt / all keywords in search order, built once
+const EK_ALLE = [...EK_ICONS, ...EK_ICONS_EN];
+
 const ekEsc = (s) => String(s ?? "").replace(/[&<>"']/g, (c) =>
   ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
 
@@ -231,8 +238,12 @@ class ShoppingTilesCard extends HTMLElement {
     if (!config.entity || !config.entity.startsWith("todo.")) {
       throw new Error(`${EK_TEXT.de.needEntity} / ${EK_TEXT.en.needEntity}`);
     }
+    if (config.favorites_entity && !String(config.favorites_entity).startsWith("todo.")) {
+      throw new Error(`${EK_TEXT.de.needFavEntity} / ${EK_TEXT.en.needFavEntity}`);
+    }
     const alteListe = this._config?.entity;
     this._config = { ...config };
+    this._iconCache = null;
     if (!this.shadowRoot) this.attachShadow({ mode: "open" });
     if (alteListe !== this._config.entity) {
       // andere Liste gewählt: laufende Anmeldung ungültig machen, neu abonnieren
@@ -243,6 +254,11 @@ class ShoppingTilesCard extends HTMLElement {
       this._undoListe = [];
       this._fehler = null;
       this._weg = undefined;
+      this._aboFehlerZeit = 0;
+    }
+    if (this._favEntity !== this._config.favorites_entity) {
+      this._favWeg();
+      this._favEntity = this._config.favorites_entity;
     }
     this._built = false;
     if (this._hass) {
@@ -250,6 +266,7 @@ class ShoppingTilesCard extends HTMLElement {
       this._build();
       this._render();
       this._abo();
+      this._favAbo();
     }
   }
 
@@ -258,6 +275,7 @@ class ShoppingTilesCard extends HTMLElement {
     this._hass = hass;
     if (!this._built) this._build();
     this._abo();
+    this._favAbo();
   }
 
   // Liste da und verfügbar? Sonst Karte sperren; kommt sie wieder, neu anmelden – nach dem Neuladen einer
@@ -273,13 +291,17 @@ class ShoppingTilesCard extends HTMLElement {
       this._aboNr = (this._aboNr || 0) + 1;
       this._unsubscribe();
       clearTimeout(this._retryTimer);
+      this._aboFehlerZeit = 0;
       if (weg || zurueck) { this._items = null; this._fehler = null; this._render(); }
     }
-    if (!weg && !this._unsub && !this._subscribing) this._subscribe();
+    // nach einem Fehler 30 s Pause, sonst würde jedes hass-Update sofort neu anfragen
+    // 30 s pause after an error, otherwise every hass update would ask again right away
+    const pause = this._aboFehlerZeit && Date.now() - this._aboFehlerZeit < 30000;
+    if (!weg && !this._unsub && !this._subscribing && !pause) this._subscribe();
   }
 
   connectedCallback() {
-    if (this._hass) this._abo();
+    if (this._hass) { this._abo(); this._favAbo(); }
     if (this._ro && this._grid) {
       this._ro.observe(this._grid);
       this._ro.observe(this.shadowRoot.querySelector("ha-card"));
@@ -289,7 +311,52 @@ class ShoppingTilesCard extends HTMLElement {
     this._unsubscribe();
     clearTimeout(this._retryTimer);
     this._wartenLeeren();
+    this._favWeg();
+    clearTimeout(this._langTimer);
+    if (this._undoListe?.length) { clearTimeout(this._undoTimer); this._undoEnde(); }
     if (this._ro) this._ro.disconnect();
+  }
+
+  // Favoriten aus einer eigenen To-do-Liste (favorites_entity): eigenes Abo, Fehler sperren die Karte nicht
+  // favorites from a separate to-do list (favorites_entity): own subscription, errors do not lock the card
+  _favAbo() {
+    const fe = this._config?.favorites_entity;
+    if (!fe || !this._hass) return;
+    const st = this._hass.states[fe];
+    if (!st || st.state === "unavailable") {
+      if (this._favUnsub || this._favListe) { this._favWeg(); if (this._items) this._render(); }
+      return;
+    }
+    if (this._favUnsub || this._favLaeuft || !this.isConnected) return;
+    if (this._favFehlerZeit && Date.now() - this._favFehlerZeit < 30000) return;
+    this._favLaeuft = true;
+    const nr = this._favNr = (this._favNr || 0) + 1;
+    this._hass.connection.subscribeMessage(
+      (msg) => {
+        if (nr !== this._favNr) return;
+        this._favFehlerZeit = 0;
+        this._favListe = msg.items || [];
+        if (this._items) this._render();
+        if (this._bDialog?.open) this._favKnopf();
+      },
+      { type: "todo/item/subscribe", entity_id: fe }
+    ).then((unsub) => {
+      if (nr !== this._favNr) { unsub(); return; }
+      this._favLaeuft = false;
+      if (!this.isConnected) { unsub(); return; }
+      this._favUnsub = unsub;
+    }).catch(() => {
+      if (nr !== this._favNr) return;
+      this._favLaeuft = false;
+      this._favFehlerZeit = Date.now();
+    });
+  }
+
+  _favWeg() {
+    this._favNr = (this._favNr || 0) + 1;
+    if (this._favUnsub) { this._favUnsub(); this._favUnsub = null; }
+    this._favLaeuft = false;
+    this._favListe = null;
   }
 
   _subscribe() {
@@ -301,7 +368,7 @@ class ShoppingTilesCard extends HTMLElement {
     this._hass.connection.subscribeMessage(
       (msg) => {
         if (nr !== this._aboNr) return;
-        this._fehler = null; this._items = msg.items || [];
+        this._fehler = null; this._aboFehlerZeit = 0; this._items = msg.items || [];
         this._wartenLeeren(); this._render();
       },
       { type: "todo/item/subscribe", entity_id: this._config.entity }
@@ -323,6 +390,7 @@ class ShoppingTilesCard extends HTMLElement {
       }
       // Fehler merken, damit _render ihn nicht überschreibt / keep the error so _render does not overwrite it
       this._fehler = `${this._t.error}: ${err.message || err}`;
+      this._aboFehlerZeit = Date.now();
       this._render();
       // nach 30 s erneut versuchen, solange die Karte angezeigt wird / retry after 30 s while the card is shown
       clearTimeout(this._retryTimer);
@@ -341,15 +409,25 @@ class ShoppingTilesCard extends HTMLElement {
 
   get _titel() { return this._config.title || this._t.title; }
 
+  // Ergebnis je Name zwischengespeichert; setConfig leert den Speicher (eigene icons können sich ändern)
+  // result cached per name; setConfig clears the cache (custom icons may change)
   _icon(name) {
-    const own = this._config.icons || {};
     const n = String(name).toLowerCase();
-    for (const [k, v] of Object.entries(own)) if (n.includes(k.toLowerCase())) return v;
-    const woerter = n.split(/[^a-zäöüß]+/);
-    for (const [k, v] of [...EK_ICONS, ...EK_ICONS_EN]) {
-      if (k.startsWith("=") ? woerter.includes(k.slice(1)) : n.includes(k)) return v;
+    if (!this._iconCache) this._iconCache = new Map();
+    const da = this._iconCache.get(n);
+    if (da) return da;
+    let erg = "mdi:basket-outline";
+    const own = this._config.icons || {};
+    const eigen = Object.entries(own).find(([k]) => n.includes(String(k).toLowerCase()));
+    if (eigen) erg = eigen[1];
+    else {
+      const woerter = n.split(/[^a-zäöüß]+/);
+      const treffer = EK_ALLE.find(([k]) => (k.startsWith("=") ? woerter.includes(k.slice(1)) : n.includes(k)));
+      if (treffer) erg = treffer[1];
     }
-    return "mdi:basket-outline";
+    if (this._iconCache.size > 2000) this._iconCache.clear();
+    this._iconCache.set(n, erg);
+    return erg;
   }
 
   _build() {
@@ -400,7 +478,8 @@ class ShoppingTilesCard extends HTMLElement {
         ha-card.gesperrt .status > *, ha-card.gesperrt .zt-bereich, ha-card.gesperrt .fav-bereich { visibility:hidden; }
         form button[type=submit]:disabled, input:disabled { opacity:.5; cursor:default; }
         .leer { grid-column: 1 / -1; color: var(--secondary-text-color); text-align:center; padding: 12px 0; }
-        .undo { display:none; font-size:12px; color: var(--secondary-text-color); white-space:nowrap; }
+        .undo.aus { position:absolute; width:1px; height:1px; overflow:hidden; clip-path: inset(50%); white-space:nowrap; }
+        .undo { font-size:12px; color: var(--secondary-text-color); white-space:nowrap; }
         .undo button { font: inherit; background:none; border:none; padding:0; color: var(--primary-color); cursor:pointer; margin-left:6px; }
         form { display:flex; gap:8px; align-items:center; }
         .status { display:flex; align-items:center; gap:10px; flex:1; min-height:0; }
@@ -435,6 +514,11 @@ class ShoppingTilesCard extends HTMLElement {
         dialog.bearbeiten .loeschen { background:none; color: var(--error-color, #db4437); margin-right:auto; }
         dialog.bearbeiten .abbrechen { background:none; color: var(--primary-color); }
         dialog.bearbeiten .speichern { background: var(--primary-color); color: var(--text-primary-color, #fff); }
+        dialog.bearbeiten .favknopf { display:block; margin-top:14px; font: inherit; border:1px solid var(--divider-color, rgba(127,127,127,.4)); background:none;
+          color: var(--primary-text-color); border-radius:8px; padding: 8px 12px; cursor:pointer; width:100%; text-align:left; }
+        dialog.bearbeiten .favknopf[hidden], dialog.bearbeiten [hidden] { display:none; }
+        dialog.bearbeiten .favknopf:disabled { opacity:.5; cursor:default; }
+        dialog.bearbeiten .bfehler { margin-top:12px; color: var(--error-color, #db4437); font-size:13px; }
         dialog h3 { font-size: 14px; font-weight: 500; color: var(--secondary-text-color); margin: 16px 0 8px; }
       </style>
       <ha-card>
@@ -445,7 +529,7 @@ class ShoppingTilesCard extends HTMLElement {
         <div class="grid haupt"><div class="leer">${t.loading}</div></div>
         <div class="status">
           <button type="button" class="zahl" title="${t.showAll}"></button>
-          <div class="undo" role="status"><span class="undotext"></span><button type="button">${t.undo}</button></div>
+          <div class="undo aus" role="status"><span class="undotext"></span><button type="button" hidden>${t.undo}</button></div>
           <div class="chips aus"></div>
         </div>
         <div class="fav-bereich" hidden>
@@ -486,6 +570,8 @@ class ShoppingTilesCard extends HTMLElement {
           <input id="bname" type="text" required>
           <label for="bdesc">${t.desc}</label>
           <input id="bdesc" type="text">
+          <button type="button" class="favknopf" hidden></button>
+          <div class="bfehler" role="alert" hidden></div>
           <div class="knoepfe">
             <button type="button" class="loeschen">${t.del}</button>
             <button type="button" class="abbrechen">${t.cancel}</button>
@@ -533,19 +619,24 @@ class ShoppingTilesCard extends HTMLElement {
     this._bDialog.addEventListener("click", (e) => { if (e.target === this._bDialog) this._bDialog.close(); });
     r.querySelector(".abbrechen").addEventListener("click", () => this._bDialog.close());
     r.querySelector(".loeschen").addEventListener("click", () => this._loeschen());
+    r.querySelector(".favknopf").addEventListener("click", () => this._favUmschalten());
     r.querySelector(".bform").addEventListener("submit", (e) => { e.preventDefault(); this._speichern(); });
     // lange drücken (Touch/Maus) oder Rechtsklick öffnet „Bearbeiten“ / long press or right click opens "edit"
+    // offene Artikel: bearbeiten; Favoriten-Kacheln nur mit Favoriten-Liste: entfernen
+    // open items: edit; favorite tiles only with a favorites list: remove
+    const bearbeitbar = (k) => !!k && !k.classList.contains("mehr")
+      && (!k.classList.contains("zuletzt") || (k.classList.contains("fav") && !!this._config.favorites_entity && !!this._favListe));
     const startLang = (e) => {
       const k = e.target.closest(".kachel");
-      if (!k || k.classList.contains("mehr") || k.classList.contains("zuletzt")) return;
+      if (!bearbeitbar(k)) return;
       this._start = { x: e.clientX, y: e.clientY };
       clearTimeout(this._langTimer);
-      this._langTimer = setTimeout(() => { this._lang = true; this._bearbeiten(k.dataset.uid); }, 550);
+      this._langTimer = setTimeout(() => { this._lang = true; this._bearbeiten(k.dataset.uid, k.classList.contains("fav")); }, 550);
     };
     const stopLang = () => clearTimeout(this._langTimer);
     // jeder neue Druck beginnt ohne „lange gedrückt“-Merker / every new press starts without the long-press flag
     r.addEventListener("pointerdown", () => { this._lang = false; }, true);
-    for (const g of [this._grid, this._alle]) {
+    for (const g of [this._grid, this._alle, this._favGrid, this._favAlle]) {
       g.addEventListener("pointerdown", startLang);
       g.addEventListener("pointerup", stopLang);
       g.addEventListener("pointerleave", stopLang);
@@ -555,11 +646,11 @@ class ShoppingTilesCard extends HTMLElement {
       });
       g.addEventListener("contextmenu", (e) => {
         const k = e.target.closest(".kachel");
-        if (!k || k.classList.contains("mehr") || k.classList.contains("zuletzt")) return;
+        if (!bearbeitbar(k)) return;
         e.preventDefault();
         stopLang();
         this._lang = true;
-        this._bearbeiten(k.dataset.uid);
+        this._bearbeiten(k.dataset.uid, k.classList.contains("fav"));
       });
     }
     // Tastatur: Enter/Leertaste wie Antippen, F2 oder Kontextmenü-Taste zum Bearbeiten
@@ -578,9 +669,9 @@ class ShoppingTilesCard extends HTMLElement {
         this._lang = false;
         klick(e);
       } else if ((e.key === "F2" || e.key === "ContextMenu" || (e.key === "F10" && e.shiftKey))
-                 && !k.classList.contains("mehr") && !k.classList.contains("zuletzt")) {
+                 && bearbeitbar(k)) {
         e.preventDefault();
-        this._bearbeiten(k.dataset.uid);
+        this._bearbeiten(k.dataset.uid, k.classList.contains("fav"));
       }
     };
     for (const g of [this._grid, this._alle, this._zuletztAlle, this._ztGrid, this._favGrid, this._favAlle]) g.addEventListener("keydown", taste);
@@ -589,7 +680,7 @@ class ShoppingTilesCard extends HTMLElement {
       const uid = this._fokusUid;
       this._fokusUid = null;
       if (!uid) return;
-      const k = [...this._grid.querySelectorAll(".kachel")].find((x) => x.dataset.uid === uid);
+      const k = [...this._grid.querySelectorAll(".kachel"), ...this._favGrid.querySelectorAll(".kachel")].find((x) => x.dataset.uid === uid);
       if (k) k.focus();
     });
     this._undo.querySelector("button").addEventListener("click", () => this._rueckgaengig());
@@ -613,6 +704,14 @@ class ShoppingTilesCard extends HTMLElement {
     this._ro.observe(this._grid);
     this._ro.observe(r.querySelector("ha-card"));
     this._built = true;
+    // Neuaufbau (z. B. geänderte Einstellung) während eines laufenden Rückgängig: Leiste wiederherstellen
+    // rebuild (e.g. a changed setting) during a pending undo: restore the bar, the running timeout stays
+    if (this._undoListe?.length) {
+      this._undo.classList.remove("aus");
+      this._undo.querySelector("button").hidden = false;
+      this._status.classList.add("undo-aktiv");
+      this._undoText();
+    }
   }
 
   _zeilen() {
@@ -796,7 +895,9 @@ class ShoppingTilesCard extends HTMLElement {
   // favorites from the config (comma-separated text or a list); open ones are hidden
   _favNamen() {
     const f = this._config.favorites;
-    const roh = Array.isArray(f) ? f : String(f || "").split(/[,;\n]/);
+    const roh = this._config.favorites_entity
+      ? (this._favListe || []).map((i) => i.summary)
+      : Array.isArray(f) ? f : String(f || "").split(/[,;\n]/);
     const gesehen = new Set();
     const namen = [];
     for (const x of roh) {
@@ -806,7 +907,7 @@ class ShoppingTilesCard extends HTMLElement {
       gesehen.add(k);
       namen.push(n);
     }
-    return namen.slice(0, 48);
+    return namen;
   }
 
   _renderFavoriten(offen) {
@@ -930,48 +1031,137 @@ class ShoppingTilesCard extends HTMLElement {
 
   // Dienst aufrufen; die Fehlermeldung zeigt HA selbst, die Karte stellt nur die Anzeige zurück
   // call a service; HA shows the error toast itself, the card only restores its display
-  _dienst(aktion, daten) {
-    return this._hass.callService("todo", aktion, daten, { entity_id: this._config.entity });
+  _dienst(aktion, daten, liste = this._config.entity) {
+    return this._hass.callService("todo", aktion, daten, { entity_id: liste });
   }
 
   _vibrieren(art) {
     this.dispatchEvent(new CustomEvent("haptic", { detail: art, bubbles: true, composed: true }));
   }
 
-  _bearbeiten(uid) {
-    const i = (this._items || []).find((x) => x.uid === uid);
-    if (!i || this._bDialog.open) return;
+  _bearbeiten(uid, fav = false) {
+    if (this._bDialog.open) return;
+    // Favoriten-Kachel: nur Name zeigen und „Aus Favoriten entfernen“ anbieten
+    // favorite tile: show the name only and offer "remove from favorites"
+    const i = fav ? (this._favs || []).find((x) => x.uid === uid) : (this._items || []).find((x) => x.uid === uid);
+    if (!i) return;
     this._vibrieren("medium");
     this._bUid = uid;
+    this._bFav = fav;
+    this._bName = i.summary || "";
     const r = this.shadowRoot;
-    r.querySelector("#bname").value = i.summary || "";
+    const name = r.querySelector("#bname");
+    name.value = i.summary || "";
+    name.readOnly = fav;
     r.querySelector("#bdesc").value = i.description || "";
+    // nur anbieten, was die Liste kann: Angabe (64), Löschen (2), Umbenennen/Speichern (4)
+    // offer only what the list supports: description (64), delete (2), rename/save (4)
+    const m = this._merkmale();
+    const zeigen = { "#bdesc": !fav && !!(m & 64), "label[for=bdesc]": !fav && !!(m & 64), ".loeschen": !fav && !!(m & 2), ".speichern": !fav && !!(m & 4) };
+    for (const [sel, an] of Object.entries(zeigen)) r.querySelector(sel).hidden = !an;
+    if (!fav && !(m & 4)) name.readOnly = true;
+    const fehler = r.querySelector(".bfehler");
+    fehler.hidden = true;
+    fehler.textContent = "";
+    r.querySelector("#stc-bearb-titel").textContent = fav ? this._t.favItem : this._t.edit;
+    this._favKnopf();
     if (this._dialog.open) this._dialog.close();
     this._fokusUid = uid;
     this._bDialog.showModal();
-    r.querySelector("#bname").focus();
+    (fav ? r.querySelector(".favknopf") : name).focus();
   }
 
-  _speichern() {
+  _istFav(name) {
+    const k = String(name || "").trim().toLowerCase();
+    return (this._favListe || []).some((x) => String(x.summary || "").trim().toLowerCase() === k);
+  }
+
+  // Knopf „Zu Favoriten / Aus Favoriten“ – nur mit erreichbarer Favoriten-Liste
+  // "add to / remove from favorites" button – only with a reachable favorites list
+  _favKnopf() {
+    const b = this.shadowRoot.querySelector(".favknopf");
+    const an = !!(this._config.favorites_entity && this._favListe);
+    b.hidden = !an;
+    if (!an) return;
+    const ist = this._istFav(this._bName);
+    b.textContent = ist ? `★ ${this._t.favRemove}` : `☆ ${this._t.favAddBtn}`;
+    b.setAttribute("aria-pressed", String(ist));
+  }
+
+  async _favUmschalten() {
+    const fe = this._config.favorites_entity;
+    const name = String(this._bName || "").trim();
+    const uidVorher = this._bUid;
+    let b = this.shadowRoot.querySelector(".favknopf");
+    if (!fe || !name || this._favSchaltet) return;
+    this._favSchaltet = true;
+    b.disabled = true;
+    const k = name.toLowerCase();
+    // gilt die Antwort noch dem offenen Fenster? / does the answer still belong to the open dialog?
+    const gleich = () => this._bDialog.open && this._bUid === uidVorher;
+    try {
+      if (this._istFav(name)) {
+        const uids = (this._favListe || []).filter((x) => String(x.summary || "").trim().toLowerCase() === k).map((x) => x.uid);
+        for (const uid of uids) await this._hass.callService("todo", "remove_item", { item: uid }, { entity_id: fe });
+      } else {
+        await this._hass.callService("todo", "add_item", { item: name }, { entity_id: fe });
+      }
+      if (this._bFav && gleich()) this._bDialog.close();
+    } catch (err) {
+      b = this.shadowRoot.querySelector(".favknopf");
+      if (gleich()) b.textContent = `⚠ ${this._t.favFail}`;
+    } finally {
+      this._favSchaltet = false;
+      this.shadowRoot.querySelector(".favknopf").disabled = false;
+    }
+  }
+
+  _merkmale() {
+    return Number(this._hass?.states[this._config.entity]?.attributes?.supported_features) || 0;
+  }
+
+  // Fenster erst nach erfolgreichem Speichern schließen; ein Fehler bleibt sichtbar im Fenster
+  // close the dialog only after a successful save; an error stays visible in the dialog
+  async _speichern() {
+    if (this._bFav || this._bSpeichert) return;
     const r = this.shadowRoot;
     const i = (this._items || []).find((x) => x.uid === this._bUid);
     const name = r.querySelector("#bname").value.trim();
     const desc = r.querySelector("#bdesc").value.trim();
-    if (!i || !name) return;
+    const m = this._merkmale();
+    if (!i || !name || !(m & 4)) return;
     const daten = { item: this._bUid };
     if (name !== i.summary) daten.rename = name;
-    if (desc !== (i.description || "")) daten.description = desc;
-    this._bDialog.close();
-    if (Object.keys(daten).length > 1) this._dienst("update_item", daten).catch(() => {});
+    if ((m & 64) && desc !== (i.description || "")) daten.description = desc;
+    if (Object.keys(daten).length < 2) { this._bDialog.close(); return; }
+    const uidVorher = this._bUid;
+    // gilt die Antwort noch dem offenen Fenster? / does the answer still belong to the open dialog?
+    const gleich = () => this._bDialog.open && this._bUid === uidVorher;
+    this._bSpeichert = true;
+    r.querySelector(".speichern").disabled = true;
+    try {
+      await this._dienst("update_item", daten);
+      if (gleich()) this._bDialog.close();
+    } catch (err) {
+      if (gleich()) {
+        const fehler = this.shadowRoot.querySelector(".bfehler");
+        fehler.textContent = `${this._t.saveFail}: ${err?.message || err}`;
+        fehler.hidden = false;
+      }
+    } finally {
+      this._bSpeichert = false;
+      this.shadowRoot.querySelector(".speichern").disabled = false;
+    }
   }
 
   _loeschen() {
+    if (this._bFav) return;
     const uid = this._bUid;
     const i = (this._items || []).find((x) => x.uid === uid);
     this._fokusUid = null;
     this._bDialog.close();
     if (!uid || !i) return;
-    const eintrag = { art: "del", uid, summary: i.summary, description: i.description || "" };
+    const eintrag = { art: "del", uid, summary: i.summary, description: i.description || "", liste: this._config.entity };
     eintrag.loeschen = this._dienst("remove_item", { item: uid });
     eintrag.loeschen.catch(() => this._undoEntfernen(eintrag));
     this._undoZeigen(eintrag);
@@ -984,7 +1174,7 @@ class ShoppingTilesCard extends HTMLElement {
   _abhaken(uid, name, el) {
     if (!uid || !this._dimmen(uid, el)) return;
     this._vibrieren("success");
-    const eintrag = { art: "done", uid, summary: name };
+    const eintrag = { art: "done", uid, summary: name, liste: this._config.entity };
     this._dienst("update_item", { item: uid, status: "completed" }).catch(() => {
       this._entgrauen(uid);
       if (this._fokus?.uid === uid) this._fokus = null;
@@ -996,9 +1186,12 @@ class ShoppingTilesCard extends HTMLElement {
   // Rückgängig gilt für alle Aktionen der letzten 10 s / undo covers every action of the last 10 s
   _undoZeigen(eintrag) {
     this._undoListe = [...(this._undoListe || []), eintrag];
-    this._undoText();
-    this._undo.style.display = "block";
+    // erst einblenden, dann Text setzen: die Live-Region bleibt immer im Barrierefreiheitsbaum
+    // show first, then set the text: the live region always stays in the accessibility tree
+    this._undo.classList.remove("aus");
+    this._undo.querySelector("button").hidden = false;
     this._status.classList.add("undo-aktiv");
+    this._undoText();
     clearTimeout(this._undoTimer);
     this._undoTimer = setTimeout(() => this._undoEnde(), 10000);
   }
@@ -1016,11 +1209,28 @@ class ShoppingTilesCard extends HTMLElement {
     if (l.length === 1) text = l[0].art === "del" ? t.deleted(name(l[0])) : t.done(name(l[0]));
     else if (l.every((x) => x.art === "done")) text = t.doneN(l.length);
     else text = t.changes(l.length);
+    const feld = this._undo.querySelector(".undotext");
+    if (feld.textContent !== text) feld.textContent = text;
+  }
+
+  // kurze Meldung im Rückgängig-Bereich (Live-Region), ohne Rückgängig-Knopf
+  // short message in the undo area (live region), without the undo button
+  // laufende Rückgängig-Einträge bleiben erhalten; dann nur der Text, Knopf und Ablaufzeit unverändert
+  // pending undo entries are kept; then only the text changes, button and timeout stay as they are
+  _meldung(text) {
+    if (this._undoListe?.length) { this._undo.querySelector(".undotext").textContent = text; return; }
+    this._undo.classList.remove("aus");
+    this._undo.querySelector("button").hidden = true;
+    this._status.classList.add("undo-aktiv");
     this._undo.querySelector(".undotext").textContent = text;
+    clearTimeout(this._undoTimer);
+    this._undoTimer = setTimeout(() => this._undoEnde(), 6000);
   }
 
   _undoEnde() {
-    this._undo.style.display = "none";
+    this._undo.classList.add("aus");
+    this._undo.querySelector("button").hidden = true;
+    this._undo.querySelector(".undotext").textContent = "";
     this._status.classList.remove("undo-aktiv");
     this._undoListe = [];
     requestAnimationFrame(() => this._chipsKuerzen());
@@ -1031,15 +1241,17 @@ class ShoppingTilesCard extends HTMLElement {
     if (!liste.length) return;
     for (const x of liste) {
       if (x.art === "done") {
-        this._dienst("update_item", { item: x.uid, status: "needs_action" }).catch(() => {});
+        this._dienst("update_item", { item: x.uid, status: "needs_action" }, x.liste).catch(() => this._meldung(this._t.undoFail));
       } else {
         // Gelöschtes neu anlegen; die Angabe nur, wenn die Liste sie kennt (Merkmal 64)
         // add a deleted item again; the description only if the list supports it (feature 64)
-        const merkmale = this._hass.states[this._config.entity]?.attributes?.supported_features || 0;
+        const merkmale = this._hass.states[x.liste]?.attributes?.supported_features || 0;
         const daten = { item: x.summary };
         if (x.description && (merkmale & 64)) daten.description = x.description;
         // erst nach bestätigtem Löschen neu anlegen / add again only once the delete is confirmed
-        x.loeschen.then(() => this._dienst("add_item", daten).catch(() => {}), () => {});
+        // in die Liste, aus der gelöscht wurde, auch wenn inzwischen eine andere gewählt ist
+        // into the list it was deleted from, even if another list has been chosen meanwhile
+        x.loeschen.then(() => this._dienst("add_item", daten, x.liste).catch(() => this._meldung(this._t.undoFail)), () => {});
       }
     }
     clearTimeout(this._undoTimer);
@@ -1061,15 +1273,25 @@ const EK_EDITOR_TEXT = {
   de: { entity: "Einkaufsliste (To-do-Liste)", rows: "Kachelreihen", rowsAuto: "Automatisch (nach Kartenhöhe)", show_recent: "Zuletzt gekaufte Artikel anzeigen", show_title: "Titel in der Karte anzeigen",
         recent_style: "Zuletzt gekaufte als", styleAuto: "Automatisch (Kacheln, wenn Platz frei ist)", styleChips: "Chips (eine Zeile)", styleTiles: "Kacheln",
         sort: "Sortierung der offenen Artikel", sortNone: "Wie in der Liste", sortCategory: "Nach Bereich (Weg durch den Laden)", sortAlpha: "Alphabetisch",
+        favorites_entity: "Favoriten-Liste (gilt für alle Karten, Artikel per langem Drücken hinzufügen)",
         favorites: "Favoriten (durch Komma getrennt, z. B. Milch, Brot, Eier)",
         favorites_in_recent: "Favoriten auch unter „Zuletzt gekauft“ zeigen",
+        favListName: "Favoriten", favCreate: "Favoriten-Liste anlegen", favMove: "Favoriten aus dem Textfeld in die Liste übernehmen",
+        favCreateHint: "Legt in Home Assistant eine To-do-Liste „Favoriten“ an (Integration Local To-do) und wählt sie aus.",
+        favBusy: "Einen Moment …", favCreated: (e) => `Favoriten-Liste ${e} angelegt und ausgewählt.`, favFound: (e) => `Favoriten-Liste ${e} gab es schon – ausgewählt.`, favMoved: (n) => `${n} Favoriten übernommen.`,
+        favErr: "Hat nicht geklappt", favListHint: "Mit Favoriten-Liste wird das Textfeld nicht mehr verwendet.",
         title: "Titel", language: "Sprache", auto: "Automatisch (wie HA)",
         hint: "Eigene Symbole (icons) lassen sich im YAML-Modus festlegen." },
   en: { entity: "Shopping list (to-do list)", rows: "Rows of tiles", rowsAuto: "Automatic (from card height)", show_recent: "Show recently bought items", show_title: "Show title in card",
         recent_style: "Show recently bought as", styleAuto: "Automatic (tiles when there is free space)", styleChips: "Chips (one line)", styleTiles: "Tiles",
         sort: "Sort open items", sortNone: "As in the list", sortCategory: "By category (route through the shop)", sortAlpha: "Alphabetical",
+        favorites_entity: "Favorites list (shared by all cards, add items with a long press)",
         favorites: "Favorites (comma-separated, e.g. milk, bread, eggs)",
         favorites_in_recent: "Also show favorites under “Recently bought”",
+        favListName: "Favorites", favCreate: "Create favorites list", favMove: "Move the favorites from the text field into the list",
+        favCreateHint: "Creates a to-do list “Favorites” in Home Assistant (Local To-do integration) and selects it.",
+        favBusy: "One moment …", favCreated: (e) => `Favorites list ${e} created and selected.`, favFound: (e) => `Favorites list ${e} already existed – selected.`, favMoved: (n) => `${n} favorites moved.`,
+        favErr: "That did not work", favListHint: "With a favorites list, the text field is no longer used.",
         title: "Title", language: "Language", auto: "Automatic (same as HA)",
         hint: "Custom icons (icons) can be set in YAML mode." },
 };
@@ -1105,7 +1327,10 @@ class ShoppingTilesCardEditor extends HTMLElement {
       { name: "recent_style", selector: { select: { mode: "dropdown", options: [
         { value: "auto", label: x.styleAuto }, { value: "chips", label: x.styleChips }, { value: "tiles", label: x.styleTiles },
       ] } } },
-      { name: "favorites", selector: { text: {} } },
+      { name: "favorites_entity", selector: { entity: { domain: "todo" } } },
+      // Textfeld nur ohne Favoriten-Liste – oder solange dort noch etwas steht (zum Übernehmen)
+      // text field only without a favorites list – or while it still holds something (to move it over)
+      ...(this._config.favorites_entity && !this._favText() ? [] : [{ name: "favorites", selector: { text: {} } }]),
       { name: "favorites_in_recent", selector: { boolean: {} } },
       { name: "show_title", selector: { boolean: {} } },
       { name: "title", selector: { text: {} } },
@@ -1123,9 +1348,12 @@ class ShoppingTilesCardEditor extends HTMLElement {
       this._form.addEventListener("value-changed", (e) => this._changed(e.detail.value));
       this._hint = document.createElement("div");
       this._hint.style.cssText = "margin-top:12px;font-size:12px;color:var(--secondary-text-color)";
-      this.append(this._form, this._hint);
+      this._favBox = document.createElement("div");
+      this._favBox.style.cssText = "margin-top:12px;font-size:12px;color:var(--secondary-text-color)";
+      this.append(this._form, this._favBox, this._hint);
     }
     this._hint.textContent = this._txt.hint;
+    this._favBoxZeichnen();
     this._form.hass = this._hass;
     this._form.schema = this._schema();
     this._form.data = {
@@ -1136,6 +1364,113 @@ class ShoppingTilesCardEditor extends HTMLElement {
     };
   }
 
+  _favText() {
+    const f = this._config.favorites;
+    return (Array.isArray(f) ? f.join(", ") : String(f || "")).trim();
+  }
+
+  // Knöpfe „Favoriten-Liste anlegen“ / „übernehmen“ – nur für Administratoren (die dürfen Integrationen anlegen)
+  // "create favorites list" / "move" buttons – admins only (they may add integrations)
+  _favBoxZeichnen() {
+    const x = this._txt;
+    const box = this._favBox;
+    const admin = !!this._hass?.user?.is_admin;
+    const knopf = (text, fn) => {
+      const b = document.createElement("button");
+      b.type = "button";
+      b.textContent = text;
+      b.style.cssText = "font:inherit;font-size:13px;padding:6px 12px;border-radius:8px;border:1px solid var(--divider-color);background:none;color:var(--primary-color);cursor:pointer;margin-right:8px";
+      b.addEventListener("click", () => { if (!this._favArbeit) fn(); });
+      return b;
+    };
+    box.replaceChildren();
+    if (admin && !this._config.favorites_entity) {
+      box.append(knopf(x.favCreate, () => this._favListeAnlegen()));
+      const t = document.createElement("div");
+      t.style.marginTop = "6px";
+      t.textContent = x.favCreateHint;
+      box.append(t);
+    } else if (this._config.favorites_entity && this._favText()) {
+      box.append(knopf(x.favMove, () => this._favUebernehmen()));
+      const t = document.createElement("div");
+      t.style.marginTop = "6px";
+      t.textContent = x.favListHint;
+      box.append(t);
+    }
+    if (this._favMeldung) {
+      const m = document.createElement("div");
+      m.style.cssText = "margin-top:6px;color:var(--primary-text-color)";
+      m.setAttribute("role", "status");
+      m.textContent = this._favMeldung;
+      box.append(m);
+    }
+  }
+
+  _favStatus(text) {
+    this._favMeldung = text;
+    this._favBoxZeichnen();
+  }
+
+  async _favListeAnlegen() {
+    const x = this._txt;
+    this._favArbeit = true;
+    this._favStatus(x.favBusy);
+    try {
+      const name = x.favListName;
+      let r = await this._hass.callApi("POST", "config/config_entries/flow", { handler: "local_todo", show_advanced_options: false });
+      if (r.type === "form") r = await this._hass.callApi("POST", `config/config_entries/flow/${r.flow_id}`, { todo_list_name: name });
+      let eintrag = r.type === "create_entry" ? r.result?.entry_id : null;
+      const neu = !!eintrag;
+      if (!eintrag) {
+        // gibt es schon (Abbruch „already_configured“): vorhandene Liste gleichen Namens nehmen
+        // exists already (abort "already_configured"): use the existing list of that name
+        const alle = await this._hass.callWS({ type: "config_entries/get", domain: "local_todo" });
+        eintrag = alle.find((e) => e.title === name)?.entry_id;
+      }
+      let ent = null;
+      for (let n = 0; n < 10 && !ent && eintrag; n++) {
+        const reg = await this._hass.callWS({ type: "config/entity_registry/list" });
+        ent = reg.find((e) => e.config_entry_id === eintrag && e.entity_id.startsWith("todo."))?.entity_id || null;
+        if (!ent) await new Promise((ok) => setTimeout(ok, 500));
+      }
+      if (!ent) throw new Error("todo entity not found");
+      this._favMeldung = neu ? x.favCreated(ent) : x.favFound(ent);
+      this._changed({ favorites_entity: ent });
+    } catch (err) {
+      this._favMeldung = `${x.favErr}: ${err?.message || err?.body?.message || err}`;
+    } finally {
+      this._favArbeit = false;
+      this._render();
+    }
+  }
+
+  async _favUebernehmen() {
+    const x = this._txt;
+    const fe = this._config.favorites_entity;
+    if (!fe) return;
+    this._favArbeit = true;
+    this._favStatus(x.favBusy);
+    try {
+      const vorhanden = await this._hass.callWS({ type: "todo/item/list", entity_id: fe });
+      const da = new Set((vorhanden.items || []).map((i) => String(i.summary || "").trim().toLowerCase()));
+      let n = 0;
+      for (const roh of this._favText().split(/[,;\n]/)) {
+        const name = roh.trim();
+        if (!name || da.has(name.toLowerCase())) continue;
+        await this._hass.callService("todo", "add_item", { item: name }, { entity_id: fe });
+        da.add(name.toLowerCase());
+        n++;
+      }
+      this._favMeldung = x.favMoved(n);
+      this._changed({ favorites: "" });
+    } catch (err) {
+      this._favMeldung = `${x.favErr}: ${err?.message || err}`;
+    } finally {
+      this._favArbeit = false;
+      this._render();
+    }
+  }
+
   _changed(werte) {
     const neu = { ...this._config, ...werte };
     if (!neu.language || neu.language === "auto") delete neu.language;
@@ -1143,6 +1478,7 @@ class ShoppingTilesCardEditor extends HTMLElement {
     if (Array.isArray(neu.favorites)) neu.favorites = neu.favorites.join(", ");
     if (!String(neu.favorites || "").trim()) delete neu.favorites;
     if (neu.favorites_in_recent !== true) delete neu.favorites_in_recent;
+    if (!neu.favorites_entity) delete neu.favorites_entity;
     if (neu.show_title !== false) delete neu.show_title;
     if (neu.show_recent !== false) delete neu.show_recent;
     if (!neu.recent_style || neu.recent_style === "auto") delete neu.recent_style;
@@ -1160,7 +1496,7 @@ if (!customElements.get("shopping-tiles-card")) {
 }
 console.info(`%c SHOPPING-TILES-CARD %c v${STC_VERSION} `, "color:#fff;background:#03a9f4;font-weight:600", "color:#03a9f4");
 window.customCards = window.customCards || [];
-window.customCards.push({
+if (!window.customCards.some((c) => c.type === "shopping-tiles-card")) window.customCards.push({
   type: "shopping-tiles-card",
   preview: true,
   name: "Shopping Tiles Card",
