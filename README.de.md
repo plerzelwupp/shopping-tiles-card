@@ -19,7 +19,9 @@ Entstanden ist sie als privates Projekt, um einer Bring!-Einkaufsliste in Home A
 - **Lange drücken (oder Rechtsklick) zum Bearbeiten** – Name oder Angabe ändern, Artikel löschen (auch das Löschen lässt sich rückgängig machen).
 - **Mit Tastatur bedienbar** – Tab springt von Kachel zu Kachel (auch im Fenster mit allen Artikeln), Enter oder Leertaste hakt ab, F2 oder die Kontextmenü-Taste öffnet „Bearbeiten“. Die Kacheln haben Beschriftungen für Screenreader (bisher nicht mit einem Screenreader getestet).
 - **Zuletzt gekauft** – kürzlich abgehakte Artikel erscheinen als kleine Einträge; ein Tipp setzt sie wieder auf die Liste. Bei einer hohen Karte (z. B. auf einem Wandbildschirm oder in einer Vollbild-Ansicht) werden freie Reihen stattdessen mit Kacheln der zuletzt gekauften Artikel gefüllt (mit kleinem ↺ markiert).
-- **„+N weitere“** – passt nicht alles hinein, öffnet die letzte Kachel ein Fenster mit allen offenen und den zuletzt gekauften Artikeln.
+- **Favoriten** – eine eigene Liste mit oft gekauften Artikeln (z. B. Milch, Brot, Eier), als Kacheln mit kleinem ★; ein Tipp setzt den Artikel auf die Liste. Steht er unter „Zuletzt gekauft“, wird genau dieser Eintrag wieder aktiviert (kein doppelter Eintrag in Bring!), sonst neu angelegt. Favoriten, die schon auf der Liste stehen, werden ausgeblendet. Freie Reihen gehen zuerst an die Favoriten; bei einer kleinen Karte stehen sie im Fenster.  
+  **Hinweis:** Die Favoriten stehen in der Kartenkonfiguration in Home Assistant, nicht in Bring!. In der Bring!-App sieht man sie also nicht, und wer die Karte auf mehreren Dashboards nutzt, trägt sie dort jeweils ein. Bring!-eigene Favoriten und Kataloge gibt Home Assistant nicht an Karten weiter.
+- **„+N weitere“** – passt nicht alles hinein, öffnet die letzte Kachel ein Fenster mit allen offenen Artikeln, den Favoriten und den zuletzt gekauften Artikeln.
 - **Passt ins Sections-Raster** – alle Kacheln sind gleich groß; die Zahl der Kachelreihen richtet sich nach der Kartenhöhe.
 - **Artikel hinzufügen** direkt in der Karte.
 - **Grafischer Editor** und Texte auf Deutsch/Englisch (richtet sich nach der Home-Assistant-Sprache).
@@ -63,6 +65,8 @@ entity: todo.einkaufsliste
 | `rows` | Anzahl Kachelreihen (1–5). Weglassen = automatisch passend zur Kartenhöhe. | automatisch |
 | `show_recent` | Zuletzt gekaufte Artikel anzeigen | `true` |
 | `recent_style` | Darstellung der zuletzt gekauften Artikel: `auto` (Kacheln, wenn nach allen offenen Artikeln Reihen frei sind, sonst kleine Einträge), `tiles` (immer mindestens eine Reihe Kacheln, wenn die Karte hoch genug ist) oder `chips` | `auto` |
+| `favorites` | Favoriten, durch Komma getrennt (z. B. `Milch, Brot, Eier`) oder als YAML-Liste | – |
+| `favorites_in_recent` | Abgehakte Favoriten zusätzlich unter „Zuletzt gekauft“ zeigen (standardmäßig erscheinen sie nur bei den Favoriten, damit nichts doppelt steht) | `false` |
 | `show_title` | Titel in der Karte anzeigen | `true` |
 | `title` | Titeltext | „Einkaufsliste“ |
 | `language` | `de` oder `en` (Standard: Sprache von Home Assistant, sonst Englisch) | automatisch |
@@ -83,7 +87,7 @@ icons:
 - Für einige häufige Artikel gibt es in der Symbolsammlung kein passendes Symbol (Kartoffeln, Tomaten, Butter, Honig, Marmelade, …) – sie bekommen den Einkaufskorb, sofern man keine eigene Zuordnung anlegt.
 - „Zuletzt gekauft“ nutzt die Reihenfolge, in der die Liste erledigte Artikel liefert. Bring! liefert keinen Zeitpunkt mit, die Reihenfolge ist also nur ungefähr.
 - Getestet mit Home Assistant 2026.11 in Chrome unter Windows und auf einem Android-Handy (helles und dunkles Design), mit der Bring!-Integration, Local To-do und der eingebauten Einkaufsliste. Ältere Versionen funktionieren eventuell, sind aber nicht getestet. Laut Rückmeldung aus der Community sieht die Karte auch auf dem iPhone gut aus.
-- Lässt sich die Liste nicht lesen (z. B. weil die Entität entfernt wurde), zeigt die Karte den Fehler und versucht es alle 30 Sekunden erneut.
+- Lässt sich die Liste nicht lesen oder ist sie nicht verfügbar (z. B. weil die Entität entfernt wurde oder die Integration gerade neu lädt), zeigt die Karte nur eine Meldung statt veralteter Artikel. Sobald die Liste wieder da ist, verbindet sie sich von selbst neu; nach einem Lesefehler versucht sie es alle 30 Sekunden erneut.
 - Das ist ein Hobbyprojekt. Rückmeldungen und Fehlerberichte sind willkommen.
 
 ## Unterstützen
