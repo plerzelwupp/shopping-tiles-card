@@ -131,11 +131,12 @@ const EK_TEXT = {
     undo: "Rückgängig", done: (n) => `„${n}“ abgehakt.`, empty: "Alles eingekauft 🎉", loading: "Lade …",
     error: "Liste nicht lesbar", unavailable: "Liste nicht verfügbar", close: "Schließen", tap: "Antippen zum Abhaken",
     needEntity: "Bitte eine todo-Entität angeben (z. B. todo.zuhause)",
+    needFavEntity: "favorites_entity muss eine todo-Entität sein (z. B. todo.favoriten)",
     recent: "Zuletzt:", recentTitle: "Zuletzt gekauft", readd: "Antippen, um wieder auf die Liste zu setzen",
     favTitle: "Favoriten", favAdd: "Antippen, um auf die Liste zu setzen",
     favAddBtn: "Zu Favoriten hinzufügen", favRemove: "Aus Favoriten entfernen", favItem: "Favorit", favFail: "Favoriten-Liste nicht erreichbar",
     hold: "lange drücken zum Bearbeiten", edit: "Artikel bearbeiten", name: "Name", desc: "Angabe (z. B. 1 kg, Bio)",
-    save: "Speichern", del: "Löschen", cancel: "Abbrechen",
+    save: "Speichern", del: "Löschen", cancel: "Abbrechen", saveFail: "Speichern nicht möglich",
     deleted: (n) => `„${n}“ gelöscht.`, doneN: (n) => `${n} Artikel abgehakt.`, changes: (n) => `${n} Änderungen.`,
     keys: "Enter: abhaken, F2 oder Kontextmenü-Taste: bearbeiten",
   },
@@ -145,11 +146,12 @@ const EK_TEXT = {
     undo: "Undo", done: (n) => `“${n}” checked off.`, empty: "All done 🎉", loading: "Loading …",
     error: "Could not read the list", unavailable: "List not available", close: "Close", tap: "Tap to check off",
     needEntity: "Please set a todo entity (e.g. todo.shopping_list)",
+    needFavEntity: "favorites_entity must be a todo entity (e.g. todo.favorites)",
     recent: "Recent:", recentTitle: "Recently bought", readd: "Tap to add it to the list again",
     favTitle: "Favorites", favAdd: "Tap to add it to the list",
     favAddBtn: "Add to favorites", favRemove: "Remove from favorites", favItem: "Favorite", favFail: "Favorites list not reachable",
     hold: "long press to edit", edit: "Edit item", name: "Name", desc: "Details (e.g. 1 kg, organic)",
-    save: "Save", del: "Delete", cancel: "Cancel",
+    save: "Save", del: "Delete", cancel: "Cancel", saveFail: "Could not save",
     deleted: (n) => `“${n}” deleted.`, doneN: (n) => `${n} items checked off.`, changes: (n) => `${n} changes.`,
     keys: "Enter: check off, F2 or context menu key: edit",
   },
@@ -223,6 +225,9 @@ const ekFarbe = (icon) => {
   return b ? `var(--rgb-${b[0]}-color, ${b[1]})` : "var(--rgb-grey-color, 158,158,158)";
 };
 
+// alle Stichworte in Suchreihenfolge, einmal angelegt / all keywords in search order, built once
+const EK_ALLE = [...EK_ICONS, ...EK_ICONS_EN];
+
 const ekEsc = (s) => String(s ?? "").replace(/[&<>"']/g, (c) =>
   ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
 
@@ -233,8 +238,12 @@ class ShoppingTilesCard extends HTMLElement {
     if (!config.entity || !config.entity.startsWith("todo.")) {
       throw new Error(`${EK_TEXT.de.needEntity} / ${EK_TEXT.en.needEntity}`);
     }
+    if (config.favorites_entity && !String(config.favorites_entity).startsWith("todo.")) {
+      throw new Error(`${EK_TEXT.de.needFavEntity} / ${EK_TEXT.en.needFavEntity}`);
+    }
     const alteListe = this._config?.entity;
     this._config = { ...config };
+    this._iconCache = null;
     if (!this.shadowRoot) this.attachShadow({ mode: "open" });
     if (alteListe !== this._config.entity) {
       // andere Liste gewählt: laufende Anmeldung ungültig machen, neu abonnieren
@@ -245,6 +254,7 @@ class ShoppingTilesCard extends HTMLElement {
       this._undoListe = [];
       this._fehler = null;
       this._weg = undefined;
+      this._aboFehlerZeit = 0;
     }
     if (this._favEntity !== this._config.favorites_entity) {
       this._favWeg();
@@ -281,9 +291,13 @@ class ShoppingTilesCard extends HTMLElement {
       this._aboNr = (this._aboNr || 0) + 1;
       this._unsubscribe();
       clearTimeout(this._retryTimer);
+      this._aboFehlerZeit = 0;
       if (weg || zurueck) { this._items = null; this._fehler = null; this._render(); }
     }
-    if (!weg && !this._unsub && !this._subscribing) this._subscribe();
+    // nach einem Fehler 30 s Pause, sonst würde jedes hass-Update sofort neu anfragen
+    // 30 s pause after an error, otherwise every hass update would ask again right away
+    const pause = this._aboFehlerZeit && Date.now() - this._aboFehlerZeit < 29000;
+    if (!weg && !this._unsub && !this._subscribing && !pause) this._subscribe();
   }
 
   connectedCallback() {
@@ -298,6 +312,8 @@ class ShoppingTilesCard extends HTMLElement {
     clearTimeout(this._retryTimer);
     this._wartenLeeren();
     this._favWeg();
+    clearTimeout(this._langTimer);
+    if (this._undoListe?.length) { clearTimeout(this._undoTimer); this._undoEnde(); }
     if (this._ro) this._ro.disconnect();
   }
 
@@ -352,7 +368,7 @@ class ShoppingTilesCard extends HTMLElement {
     this._hass.connection.subscribeMessage(
       (msg) => {
         if (nr !== this._aboNr) return;
-        this._fehler = null; this._items = msg.items || [];
+        this._fehler = null; this._aboFehlerZeit = 0; this._items = msg.items || [];
         this._wartenLeeren(); this._render();
       },
       { type: "todo/item/subscribe", entity_id: this._config.entity }
@@ -374,6 +390,7 @@ class ShoppingTilesCard extends HTMLElement {
       }
       // Fehler merken, damit _render ihn nicht überschreibt / keep the error so _render does not overwrite it
       this._fehler = `${this._t.error}: ${err.message || err}`;
+      this._aboFehlerZeit = Date.now();
       this._render();
       // nach 30 s erneut versuchen, solange die Karte angezeigt wird / retry after 30 s while the card is shown
       clearTimeout(this._retryTimer);
@@ -392,15 +409,25 @@ class ShoppingTilesCard extends HTMLElement {
 
   get _titel() { return this._config.title || this._t.title; }
 
+  // Ergebnis je Name zwischengespeichert; setConfig leert den Speicher (eigene icons können sich ändern)
+  // result cached per name; setConfig clears the cache (custom icons may change)
   _icon(name) {
-    const own = this._config.icons || {};
     const n = String(name).toLowerCase();
-    for (const [k, v] of Object.entries(own)) if (n.includes(k.toLowerCase())) return v;
-    const woerter = n.split(/[^a-zäöüß]+/);
-    for (const [k, v] of [...EK_ICONS, ...EK_ICONS_EN]) {
-      if (k.startsWith("=") ? woerter.includes(k.slice(1)) : n.includes(k)) return v;
+    if (!this._iconCache) this._iconCache = new Map();
+    const da = this._iconCache.get(n);
+    if (da) return da;
+    let erg = "mdi:basket-outline";
+    const own = this._config.icons || {};
+    const eigen = Object.entries(own).find(([k]) => n.includes(String(k).toLowerCase()));
+    if (eigen) erg = eigen[1];
+    else {
+      const woerter = n.split(/[^a-zäöüß]+/);
+      const treffer = EK_ALLE.find(([k]) => (k.startsWith("=") ? woerter.includes(k.slice(1)) : n.includes(k)));
+      if (treffer) erg = treffer[1];
     }
-    return "mdi:basket-outline";
+    if (this._iconCache.size > 2000) this._iconCache.clear();
+    this._iconCache.set(n, erg);
+    return erg;
   }
 
   _build() {
@@ -451,7 +478,8 @@ class ShoppingTilesCard extends HTMLElement {
         ha-card.gesperrt .status > *, ha-card.gesperrt .zt-bereich, ha-card.gesperrt .fav-bereich { visibility:hidden; }
         form button[type=submit]:disabled, input:disabled { opacity:.5; cursor:default; }
         .leer { grid-column: 1 / -1; color: var(--secondary-text-color); text-align:center; padding: 12px 0; }
-        .undo { display:none; font-size:12px; color: var(--secondary-text-color); white-space:nowrap; }
+        .undo.aus { position:absolute; width:1px; height:1px; overflow:hidden; clip-path: inset(50%); white-space:nowrap; }
+        .undo { font-size:12px; color: var(--secondary-text-color); white-space:nowrap; }
         .undo button { font: inherit; background:none; border:none; padding:0; color: var(--primary-color); cursor:pointer; margin-left:6px; }
         form { display:flex; gap:8px; align-items:center; }
         .status { display:flex; align-items:center; gap:10px; flex:1; min-height:0; }
@@ -490,6 +518,7 @@ class ShoppingTilesCard extends HTMLElement {
           color: var(--primary-text-color); border-radius:8px; padding: 8px 12px; cursor:pointer; width:100%; text-align:left; }
         dialog.bearbeiten .favknopf[hidden], dialog.bearbeiten [hidden] { display:none; }
         dialog.bearbeiten .favknopf:disabled { opacity:.5; cursor:default; }
+        dialog.bearbeiten .bfehler { margin-top:12px; color: var(--error-color, #db4437); font-size:13px; }
         dialog h3 { font-size: 14px; font-weight: 500; color: var(--secondary-text-color); margin: 16px 0 8px; }
       </style>
       <ha-card>
@@ -500,7 +529,7 @@ class ShoppingTilesCard extends HTMLElement {
         <div class="grid haupt"><div class="leer">${t.loading}</div></div>
         <div class="status">
           <button type="button" class="zahl" title="${t.showAll}"></button>
-          <div class="undo" role="status"><span class="undotext"></span><button type="button">${t.undo}</button></div>
+          <div class="undo aus" role="status"><span class="undotext"></span><button type="button" hidden>${t.undo}</button></div>
           <div class="chips aus"></div>
         </div>
         <div class="fav-bereich" hidden>
@@ -542,6 +571,7 @@ class ShoppingTilesCard extends HTMLElement {
           <label for="bdesc">${t.desc}</label>
           <input id="bdesc" type="text">
           <button type="button" class="favknopf" hidden></button>
+          <div class="bfehler" role="alert" hidden></div>
           <div class="knoepfe">
             <button type="button" class="loeschen">${t.del}</button>
             <button type="button" class="abbrechen">${t.cancel}</button>
@@ -869,7 +899,7 @@ class ShoppingTilesCard extends HTMLElement {
       gesehen.add(k);
       namen.push(n);
     }
-    return namen.slice(0, 48);
+    return namen;
   }
 
   _renderFavoriten(offen) {
@@ -1016,7 +1046,15 @@ class ShoppingTilesCard extends HTMLElement {
     name.value = i.summary || "";
     name.readOnly = fav;
     r.querySelector("#bdesc").value = i.description || "";
-    for (const sel of ["#bdesc", "label[for=bdesc]", ".loeschen", ".speichern"]) r.querySelector(sel).hidden = fav;
+    // nur anbieten, was die Liste kann: Angabe (64), Löschen (2), Umbenennen/Speichern (4)
+    // offer only what the list supports: description (64), delete (2), rename/save (4)
+    const m = this._merkmale();
+    const zeigen = { "#bdesc": !fav && !!(m & 64), "label[for=bdesc]": !fav && !!(m & 64), ".loeschen": !fav && !!(m & 2), ".speichern": !fav && !!(m & 4) };
+    for (const [sel, an] of Object.entries(zeigen)) r.querySelector(sel).hidden = !an;
+    if (!fav && !(m & 4)) name.readOnly = true;
+    const fehler = r.querySelector(".bfehler");
+    fehler.hidden = true;
+    fehler.textContent = "";
     r.querySelector("#stc-bearb-titel").textContent = fav ? this._t.favItem : this._t.edit;
     this._favKnopf();
     if (this._dialog.open) this._dialog.close();
@@ -1064,18 +1102,38 @@ class ShoppingTilesCard extends HTMLElement {
     }
   }
 
-  _speichern() {
-    if (this._bFav) return;
+  _merkmale() {
+    return Number(this._hass?.states[this._config.entity]?.attributes?.supported_features) || 0;
+  }
+
+  // Fenster erst nach erfolgreichem Speichern schließen; ein Fehler bleibt sichtbar im Fenster
+  // close the dialog only after a successful save; an error stays visible in the dialog
+  async _speichern() {
+    if (this._bFav || this._bSpeichert) return;
     const r = this.shadowRoot;
     const i = (this._items || []).find((x) => x.uid === this._bUid);
     const name = r.querySelector("#bname").value.trim();
     const desc = r.querySelector("#bdesc").value.trim();
-    if (!i || !name) return;
+    const m = this._merkmale();
+    if (!i || !name || !(m & 4)) return;
     const daten = { item: this._bUid };
     if (name !== i.summary) daten.rename = name;
-    if (desc !== (i.description || "")) daten.description = desc;
-    this._bDialog.close();
-    if (Object.keys(daten).length > 1) this._dienst("update_item", daten).catch(() => {});
+    if ((m & 64) && desc !== (i.description || "")) daten.description = desc;
+    if (Object.keys(daten).length < 2) { this._bDialog.close(); return; }
+    const knopf = r.querySelector(".speichern");
+    const fehler = r.querySelector(".bfehler");
+    this._bSpeichert = true;
+    knopf.disabled = true;
+    try {
+      await this._dienst("update_item", daten);
+      this._bDialog.close();
+    } catch (err) {
+      fehler.textContent = `${this._t.saveFail}: ${err?.message || err}`;
+      fehler.hidden = false;
+    } finally {
+      this._bSpeichert = false;
+      knopf.disabled = false;
+    }
   }
 
   _loeschen() {
@@ -1110,9 +1168,12 @@ class ShoppingTilesCard extends HTMLElement {
   // Rückgängig gilt für alle Aktionen der letzten 10 s / undo covers every action of the last 10 s
   _undoZeigen(eintrag) {
     this._undoListe = [...(this._undoListe || []), eintrag];
-    this._undoText();
-    this._undo.style.display = "block";
+    // erst einblenden, dann Text setzen: die Live-Region bleibt immer im Barrierefreiheitsbaum
+    // show first, then set the text: the live region always stays in the accessibility tree
+    this._undo.classList.remove("aus");
+    this._undo.querySelector("button").hidden = false;
     this._status.classList.add("undo-aktiv");
+    this._undoText();
     clearTimeout(this._undoTimer);
     this._undoTimer = setTimeout(() => this._undoEnde(), 10000);
   }
@@ -1130,11 +1191,14 @@ class ShoppingTilesCard extends HTMLElement {
     if (l.length === 1) text = l[0].art === "del" ? t.deleted(name(l[0])) : t.done(name(l[0]));
     else if (l.every((x) => x.art === "done")) text = t.doneN(l.length);
     else text = t.changes(l.length);
-    this._undo.querySelector(".undotext").textContent = text;
+    const feld = this._undo.querySelector(".undotext");
+    if (feld.textContent !== text) feld.textContent = text;
   }
 
   _undoEnde() {
-    this._undo.style.display = "none";
+    this._undo.classList.add("aus");
+    this._undo.querySelector("button").hidden = true;
+    this._undo.querySelector(".undotext").textContent = "";
     this._status.classList.remove("undo-aktiv");
     this._undoListe = [];
     requestAnimationFrame(() => this._chipsKuerzen());
@@ -1398,7 +1462,7 @@ if (!customElements.get("shopping-tiles-card")) {
 }
 console.info(`%c SHOPPING-TILES-CARD %c v${STC_VERSION} `, "color:#fff;background:#03a9f4;font-weight:600", "color:#03a9f4");
 window.customCards = window.customCards || [];
-window.customCards.push({
+if (!window.customCards.some((c) => c.type === "shopping-tiles-card")) window.customCards.push({
   type: "shopping-tiles-card",
   preview: true,
   name: "Shopping Tiles Card",
