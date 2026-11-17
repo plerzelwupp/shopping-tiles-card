@@ -1023,8 +1023,8 @@ class ShoppingTilesCard extends HTMLElement {
 
   // Dienst aufrufen; die Fehlermeldung zeigt HA selbst, die Karte stellt nur die Anzeige zurück
   // call a service; HA shows the error toast itself, the card only restores its display
-  _dienst(aktion, daten) {
-    return this._hass.callService("todo", aktion, daten, { entity_id: this._config.entity });
+  _dienst(aktion, daten, liste = this._config.entity) {
+    return this._hass.callService("todo", aktion, daten, { entity_id: liste });
   }
 
   _vibrieren(art) {
@@ -1143,7 +1143,7 @@ class ShoppingTilesCard extends HTMLElement {
     this._fokusUid = null;
     this._bDialog.close();
     if (!uid || !i) return;
-    const eintrag = { art: "del", uid, summary: i.summary, description: i.description || "" };
+    const eintrag = { art: "del", uid, summary: i.summary, description: i.description || "", liste: this._config.entity };
     eintrag.loeschen = this._dienst("remove_item", { item: uid });
     eintrag.loeschen.catch(() => this._undoEntfernen(eintrag));
     this._undoZeigen(eintrag);
@@ -1156,7 +1156,7 @@ class ShoppingTilesCard extends HTMLElement {
   _abhaken(uid, name, el) {
     if (!uid || !this._dimmen(uid, el)) return;
     this._vibrieren("success");
-    const eintrag = { art: "done", uid, summary: name };
+    const eintrag = { art: "done", uid, summary: name, liste: this._config.entity };
     this._dienst("update_item", { item: uid, status: "completed" }).catch(() => {
       this._entgrauen(uid);
       if (this._fokus?.uid === uid) this._fokus = null;
@@ -1197,8 +1197,10 @@ class ShoppingTilesCard extends HTMLElement {
 
   // kurze Meldung im Rückgängig-Bereich (Live-Region), ohne Rückgängig-Knopf
   // short message in the undo area (live region), without the undo button
+  // laufende Rückgängig-Einträge bleiben erhalten; dann nur der Text, Knopf und Ablaufzeit unverändert
+  // pending undo entries are kept; then only the text changes, button and timeout stay as they are
   _meldung(text) {
-    this._undoListe = [];
+    if (this._undoListe?.length) { this._undo.querySelector(".undotext").textContent = text; return; }
     this._undo.classList.remove("aus");
     this._undo.querySelector("button").hidden = true;
     this._status.classList.add("undo-aktiv");
@@ -1221,15 +1223,17 @@ class ShoppingTilesCard extends HTMLElement {
     if (!liste.length) return;
     for (const x of liste) {
       if (x.art === "done") {
-        this._dienst("update_item", { item: x.uid, status: "needs_action" }).catch(() => this._meldung(this._t.undoFail));
+        this._dienst("update_item", { item: x.uid, status: "needs_action" }, x.liste).catch(() => this._meldung(this._t.undoFail));
       } else {
         // Gelöschtes neu anlegen; die Angabe nur, wenn die Liste sie kennt (Merkmal 64)
         // add a deleted item again; the description only if the list supports it (feature 64)
-        const merkmale = this._hass.states[this._config.entity]?.attributes?.supported_features || 0;
+        const merkmale = this._hass.states[x.liste]?.attributes?.supported_features || 0;
         const daten = { item: x.summary };
         if (x.description && (merkmale & 64)) daten.description = x.description;
         // erst nach bestätigtem Löschen neu anlegen / add again only once the delete is confirmed
-        x.loeschen.then(() => this._dienst("add_item", daten).catch(() => this._meldung(this._t.undoFail)), () => {});
+        // in die Liste, aus der gelöscht wurde, auch wenn inzwischen eine andere gewählt ist
+        // into the list it was deleted from, even if another list has been chosen meanwhile
+        x.loeschen.then(() => this._dienst("add_item", daten, x.liste).catch(() => this._meldung(this._t.undoFail)), () => {});
       }
     }
     clearTimeout(this._undoTimer);
