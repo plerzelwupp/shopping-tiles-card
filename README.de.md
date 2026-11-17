@@ -98,6 +98,8 @@ icons:
 
 ## Gut zu wissen
 
+- Das Bearbeiten-Fenster bietet nur an, was die Liste kann: Die Angabe erscheint nur bei Listen mit Beschreibungen (z. B. Bring!, Local To-do, nicht die eingebaute Einkaufsliste). Klappt das Speichern nicht, bleibt das Fenster offen und zeigt den Fehler.
+- Grenzen der Anzeige: „Zuletzt gekauft“ zeigt als kleine Einträge bis zu 10 Artikel, im Fenster „Alle anzeigen“ bis zu 24. Favoriten haben keine Obergrenze; wie viele als Kacheln erscheinen, richtet sich nach dem Platz, alle stehen im Fenster „Alle anzeigen“.
 - Einige Artikel bekommen weiterhin den Einkaufskorb (z. B. Sellerie, Radieschen, Brühe) – dafür lässt sich eine eigene Zuordnung anlegen, auch auf eines der `stc:`-Symbole.
 - „Zuletzt gekauft“ nutzt die Reihenfolge, in der die Liste erledigte Artikel liefert. Bring! liefert keinen Zeitpunkt mit, die Reihenfolge ist also nur ungefähr.
 - Getestet mit Home Assistant 2026.11 in Chrome unter Windows und auf einem Android-Handy (helles und dunkles Design), mit der Bring!-Integration, Local To-do und der eingebauten Einkaufsliste. Ältere Versionen funktionieren eventuell, sind aber nicht getestet. Laut Rückmeldung aus der Community sieht die Karte auch auf dem iPhone gut aus.
