@@ -1,0 +1,32 @@
+# yaml-language-server: $schema=https://coderabbit.ai/integrations/schema.v2.json
+# Temporäre Konfiguration nur für den Audit-PR (audit-full -> audit-base). Nicht auf main.
+# Temporary configuration for the audit PR only (audit-full -> audit-base). Not on main.
+language: de-DE
+reviews:
+  profile: assertive
+  request_changes_workflow: false
+  high_level_summary: true
+  poem: false
+  review_status: true
+  collapse_walkthrough: false
+  auto_review:
+    enabled: true
+    drafts: false
+    base_branches:
+      - "audit-base"
+  path_filters:
+    - "!images/**"
+  path_instructions:
+    - path: "**/*"
+      instructions: >-
+        Erstaudit des gesamten Projekts. Wende die projektspezifischen Prüfrichtlinien aus
+        .coderabbit/instructions/quality-review.md vollständig an. Schreibe alle Feststellungen auf Deutsch,
+        technische Bezeichner und Codebeispiele auf Englisch.
+knowledge_base:
+  code_guidelines:
+    enabled: true
+    filePatterns:
+      - files: ".coderabbit/instructions/quality-review.md"
+        applyTo: "**/*"
+chat:
+  auto_reply: false
