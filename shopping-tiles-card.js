@@ -7,7 +7,7 @@
  *
  * https://github.com/plerzelwupp/shopping-tiles-card – MIT License, (c) 2026 plerzelwupp
  */
-const STC_VERSION = "1.2.2";
+const STC_VERSION = "1.3.0";
 
 // Reihenfolge zählt: genauere Begriffe vor allgemeinen. "=wort" trifft nur ganze Wörter.
 const EK_ICONS = [
@@ -99,6 +99,7 @@ const EK_TEXT = {
     error: "Liste nicht lesbar", unavailable: "Liste nicht verfügbar", close: "Schließen", tap: "Antippen zum Abhaken",
     needEntity: "Bitte eine todo-Entität angeben (z. B. todo.zuhause)",
     recent: "Zuletzt:", recentTitle: "Zuletzt gekauft", readd: "Antippen, um wieder auf die Liste zu setzen",
+    favTitle: "Favoriten", favAdd: "Antippen, um auf die Liste zu setzen",
     hold: "lange drücken zum Bearbeiten", edit: "Artikel bearbeiten", name: "Name", desc: "Angabe (z. B. 1 kg, Bio)",
     save: "Speichern", del: "Löschen", cancel: "Abbrechen",
     deleted: (n) => `„${n}“ gelöscht.`, doneN: (n) => `${n} Artikel abgehakt.`, changes: (n) => `${n} Änderungen.`,
@@ -111,6 +112,7 @@ const EK_TEXT = {
     error: "Could not read the list", unavailable: "List not available", close: "Close", tap: "Tap to check off",
     needEntity: "Please set a todo entity (e.g. todo.shopping_list)",
     recent: "Recent:", recentTitle: "Recently bought", readd: "Tap to add it to the list again",
+    favTitle: "Favorites", favAdd: "Tap to add it to the list",
     hold: "long press to edit", edit: "Edit item", name: "Name", desc: "Details (e.g. 1 kg, organic)",
     save: "Save", del: "Delete", cancel: "Cancel",
     deleted: (n) => `“${n}” deleted.`, doneN: (n) => `${n} items checked off.`, changes: (n) => `${n} changes.`,
@@ -290,7 +292,7 @@ class ShoppingTilesCard extends HTMLElement {
                  background: rgba(var(--k-rgb), 0.18); }
         .kreis ha-icon { --mdc-icon-size: 22px; color: rgb(var(--k-rgb)); }
         .kachel.zuletzt { opacity: 0.75; position: relative; }
-        .kachel .zurueck { position:absolute; top:6px; right:6px; --mdc-icon-size: 16px; color: var(--secondary-text-color); }
+        .kachel .zurueck, .kachel .stern { position:absolute; top:6px; right:6px; --mdc-icon-size: 16px; color: var(--secondary-text-color); }
         .mehr { background: rgba(var(--rgb-primary-color, 3,169,244), 0.15); color: var(--primary-color); }
         .mehr .plus { font-size: 24px; font-weight: 500; }
         .name { font-size: 13px; font-weight: 500; margin-top: 6px; line-height: 1.2; max-width:100%;
@@ -300,12 +302,16 @@ class ShoppingTilesCard extends HTMLElement {
         .zt-bereich[hidden] { display:none; }
         /* mit Kacheln: „X offen“ direkt unter den offenen Artikeln, dann Trennlinie und „Zuletzt gekauft“
            with tiles: "X open" right below the open items, then a divider and "recently bought" */
-        .zt-bereich { flex:1; min-height:0; margin-top:8px; border-top:1px solid var(--divider-color); }
+        .zt-bereich, .fav-bereich { flex:none; min-height:0; margin-top:8px; border-top:1px solid var(--divider-color); }
+        .fav-bereich[hidden] { display:none; }
         .zt-titel { font-size:12px; line-height:14px; color: var(--secondary-text-color); margin: 6px 0 4px; }
+        /* freier Platz über dem Eingabefeld / free space above the input field */
+        .luecke { display:none; }
+        ha-card.mit-zt .luecke { display:block; flex:1; }
         ha-card.mit-zt .status { flex:none; margin-top:8px; min-height:24px; }
         ha-card.mit-zt form { margin-top:8px; }
         /* gesperrt (Fehler, nicht verfügbar, lädt): nur die Meldung, keine alten Daten / locked: message only, no stale data */
-        ha-card.gesperrt .status > *, ha-card.gesperrt .zt-bereich { visibility:hidden; }
+        ha-card.gesperrt .status > *, ha-card.gesperrt .zt-bereich, ha-card.gesperrt .fav-bereich { visibility:hidden; }
         form button[type=submit]:disabled, input:disabled { opacity:.5; cursor:default; }
         .leer { grid-column: 1 / -1; color: var(--secondary-text-color); text-align:center; padding: 12px 0; }
         .undo { display:none; font-size:12px; color: var(--secondary-text-color); white-space:nowrap; }
@@ -356,10 +362,15 @@ class ShoppingTilesCard extends HTMLElement {
           <div class="undo" role="status"><span class="undotext"></span><button type="button">${t.undo}</button></div>
           <div class="chips aus"></div>
         </div>
+        <div class="fav-bereich" hidden>
+          <div class="zt-titel">${t.favTitle}</div>
+          <div class="grid fav-haupt"></div>
+        </div>
         <div class="zt-bereich" hidden>
           <div class="zt-titel">${t.recentTitle}</div>
           <div class="grid zuletzt-haupt"></div>
         </div>
+        <div class="luecke"></div>
         <form>
           <input type="text" placeholder="${t.add}" aria-label="${t.add}">
           <button type="submit" aria-label="${t.addBtn}"><ha-icon icon="mdi:plus"></ha-icon></button>
@@ -373,6 +384,8 @@ class ShoppingTilesCard extends HTMLElement {
         </div>
         <div class="inhalt">
           <div class="grid alle"></div>
+          <h3 class="fav-titel" hidden>${t.favTitle}</h3>
+          <div class="grid fav-alle"></div>
           <h3 class="zuletzt-titel" hidden>${t.recentTitle}</h3>
           <div class="grid zuletzt-alle"></div>
         </div>
@@ -407,9 +420,15 @@ class ShoppingTilesCard extends HTMLElement {
     this._zuletztTitel = r.querySelector(".zuletzt-titel");
     this._ztBereich = r.querySelector(".zt-bereich");
     this._ztGrid = r.querySelector(".zuletzt-haupt");
+    this._favBereich = r.querySelector(".fav-bereich");
+    this._favGrid = r.querySelector(".fav-haupt");
+    this._favAlle = r.querySelector(".fav-alle");
+    this._favTitel = r.querySelector(".fav-titel");
     const klick = (e) => {
       if (this._lang) { this._lang = false; return; }
       if (e.target.closest(".mehr")) { this._oeffnen(); return; }
+      const f = e.target.closest(".fav");
+      if (f) { this._favTippen(f); return; }
       const z = e.target.closest(".zuletzt, .chip");
       if (z) { this._wieder(z.dataset.uid, z); return; }
       const k = e.target.closest(".kachel");
@@ -419,6 +438,8 @@ class ShoppingTilesCard extends HTMLElement {
     this._alle.addEventListener("click", klick);
     this._zuletztAlle.addEventListener("click", klick);
     this._ztGrid.addEventListener("click", klick);
+    this._favGrid.addEventListener("click", klick);
+    this._favAlle.addEventListener("click", klick);
     this._chips.addEventListener("click", klick);
     this._zahl.addEventListener("click", () => this._oeffnen());
     r.querySelector(".zu").addEventListener("click", () => this._dialog.close());
@@ -476,7 +497,7 @@ class ShoppingTilesCard extends HTMLElement {
         this._bearbeiten(k.dataset.uid);
       }
     };
-    for (const g of [this._grid, this._alle, this._zuletztAlle, this._ztGrid]) g.addEventListener("keydown", taste);
+    for (const g of [this._grid, this._alle, this._zuletztAlle, this._ztGrid, this._favGrid, this._favAlle]) g.addEventListener("keydown", taste);
     // nach dem Schließen von „Bearbeiten“ zurück zur Kachel / back to the tile after closing "edit"
     this._bDialog.addEventListener("close", () => {
       const uid = this._fokusUid;
@@ -549,15 +570,15 @@ class ShoppingTilesCard extends HTMLElement {
     return Math.max(1, spuren || 0, rechnung || 0);
   }
 
-  _kachel(i, zuletzt = false) {
+  _kachel(i, zuletzt = false, fav = false) {
     const name = ekGross(i.summary);
     const icon = this._icon(i.summary);
-    const hinweis = zuletzt ? this._t.readd : `${this._t.tap}, ${this._t.hold}`;
+    const hinweis = fav ? this._t.favAdd : zuletzt ? this._t.readd : `${this._t.tap}, ${this._t.hold}`;
     return `
-      <div class="kachel${zuletzt ? " zuletzt" : ""}" role="button" tabindex="0" lang="${this._t === EK_TEXT.de ? "de" : "en"}" data-uid="${ekEsc(i.uid)}" data-name="${ekEsc(name)}"
-           aria-label="${ekEsc(name)}${i.description ? ", " + ekEsc(i.description) : ""}" aria-description="${zuletzt ? this._t.readd : this._t.keys}"
+      <div class="kachel${zuletzt ? " zuletzt" : ""}${fav ? " fav" : ""}" role="button" tabindex="0" lang="${this._t === EK_TEXT.de ? "de" : "en"}" data-uid="${ekEsc(i.uid)}" data-name="${ekEsc(name)}"
+           aria-label="${ekEsc(name)}${i.description ? ", " + ekEsc(i.description) : ""}" aria-description="${fav ? this._t.favAdd : zuletzt ? this._t.readd : this._t.keys}"
            title="${ekEsc(name)}${i.description ? " – " + ekEsc(i.description) : ""} (${hinweis})">
-        ${zuletzt ? `<ha-icon class="zurueck" icon="mdi:restore"></ha-icon>` : ""}
+        ${fav ? `<ha-icon class="stern" icon="mdi:star-outline"></ha-icon>` : zuletzt ? `<ha-icon class="zurueck" icon="mdi:restore"></ha-icon>` : ""}
         <div class="kreis" style="--k-rgb: ${ekFarbe(icon)}"><ha-icon icon="${ekEsc(icon)}"></ha-icon></div>
         <div class="name">${ekEsc(name)}</div>
         ${i.description ? `<div class="info">${ekEsc(i.description)}</div>` : ""}
@@ -575,9 +596,12 @@ class ShoppingTilesCard extends HTMLElement {
     }
     const offen = this._items.filter((i) => i.status === "needs_action");
     this._zahl.textContent = t.open(offen.length);
+    this._renderFavoriten(offen);
     this._renderZuletzt(offen);
-    const { reihen, ztReihen } = this._aufteilung(offen.length);
+    const { reihen, ztReihen, favReihen } = this._aufteilung(offen.length);
+    this._renderFavKacheln(favReihen);
     this._renderZuletztKacheln(ztReihen);
+    this.shadowRoot.querySelector("ha-card").classList.toggle("mit-zt", !this._favBereich.hidden || !this._ztBereich.hidden);
     if (!offen.length) {
       this._grid.innerHTML = `<div class="leer">${t.empty}</div>`;
       this._alle.innerHTML = `<div class="leer">${t.empty}</div>`;
@@ -609,7 +633,9 @@ class ShoppingTilesCard extends HTMLElement {
     if (!an) return;
     r.querySelector("ha-card").classList.remove("mit-zt");
     this._ztBereich.hidden = true;
-    for (const g of [this._alle, this._zuletztAlle, this._ztGrid, this._chips]) g.innerHTML = "";
+    this._favBereich.hidden = true;
+    this._favTitel.hidden = true;
+    for (const g of [this._alle, this._zuletztAlle, this._ztGrid, this._chips, this._favGrid, this._favAlle]) g.innerHTML = "";
     this._chips.classList.add("aus");
     this._zahl.textContent = "";
     if (this._dialog.open) this._dialog.close();
@@ -635,29 +661,91 @@ class ShoppingTilesCard extends HTMLElement {
   // split the rows of tiles between open and recently bought items
   // recent_style: "auto" = Kacheln nur, wenn nach allen offenen Artikeln Platz bleibt / tiles only if space is left
   //               "tiles" = immer mindestens eine Reihe / always at least one row, "chips" = nur Chips / chips only
+  // Favoriten bekommen freie Reihen zuerst, der Rest geht an „Zuletzt gekauft“
+  // favorites get free rows first, the rest goes to "recently bought"
   _aufteilung(anzahl) {
     const zeilen = this._zeilen();
     const stil = this._config.recent_style || "auto";
-    if (this._config.show_recent === false || !this._zuletzt?.length || stil === "chips") {
-      return { reihen: zeilen, ztReihen: 0 };
-    }
+    const ztMoeglich = this._config.show_recent !== false && !!this._zuletzt?.length && stil !== "chips";
+    const favN = this._favs?.length || 0;
+    if (!ztMoeglich && !favN) return { reihen: zeilen, ztReihen: 0, favReihen: 0 };
     const sp = this._spalten || 4;
     const benoetigt = Math.max(1, Math.ceil(anzahl / sp));
     const frei = this._frei || 0;
-    // Höhe: Kachelreihen je 100 px + 8 px Abstand; Bereich „Zuletzt gekauft“ mit Linie, Überschrift und
-    // Abstand zum Eingabefeld 42 px / tile rows 100 px + 8 px gap; recent section incl. divider, heading, gap 42 px
-    const rest = (k) => Math.floor((frei - (k * 108 - 8) - 42 + 8) / 108);
-    if (!frei) return stil === "tiles" ? { reihen: zeilen, ztReihen: 1 } : { reihen: zeilen, ztReihen: 0 };
+    if (!frei) return { reihen: zeilen, ztReihen: ztMoeglich && stil === "tiles" ? 1 : 0, favReihen: 0 };
+    // Höhe: Kachelreihen je 100 px + 8 px Abstand; je Bereich (Linie, Überschrift, Abstand) 42 px
+    // tile rows 100 px + 8 px gap; each section (divider, heading, gap) 42 px
+    const platz = (k, bereiche) => Math.floor((frei - (k * 108 - 8) - bereiche * 42 + 8) / 108);
     let k = Math.max(1, Math.min(benoetigt, zeilen));
-    if (stil === "tiles") while (k > 1 && rest(k) < 1) k--;
-    return { reihen: k, ztReihen: Math.max(0, rest(k)) };
+    if (ztMoeglich && stil === "tiles") while (k > 1 && platz(k, 1) < 1) k--;
+    let fav = Math.min(Math.ceil(favN / sp), Math.max(0, platz(k, 1)));
+    let zt = 0;
+    if (ztMoeglich) {
+      zt = Math.max(0, platz(k, fav ? 2 : 1) - fav);
+      // „tiles“: mindestens eine Reihe „Zuletzt gekauft“ / at least one row of recently bought
+      if (stil === "tiles" && zt < 1) {
+        fav = Math.max(0, platz(k, 2) - 1);
+        zt = Math.max(0, platz(k, fav ? 2 : 1) - fav);
+      }
+    }
+    return { reihen: k, ztReihen: zt, favReihen: fav };
+  }
+
+  // Favoriten aus der Konfiguration (Text mit Kommas oder Liste); offene werden ausgeblendet
+  // favorites from the config (comma-separated text or a list); open ones are hidden
+  _favNamen() {
+    const f = this._config.favorites;
+    const roh = Array.isArray(f) ? f : String(f || "").split(/[,;\n]/);
+    const gesehen = new Set();
+    const namen = [];
+    for (const x of roh) {
+      const n = String(x ?? "").trim();
+      const k = n.toLowerCase();
+      if (!n || gesehen.has(k)) continue;
+      gesehen.add(k);
+      namen.push(n);
+    }
+    return namen.slice(0, 48);
+  }
+
+  _renderFavoriten(offen) {
+    const offenNamen = new Set(offen.map((i) => String(i.summary).toLowerCase().trim()));
+    // erledigter Eintrag gleichen Namens (z. B. Bring!s „Zuletzt verwendet“) wird wiederverwendet
+    // a completed item with the same name (e.g. Bring!'s "recently used") is reused
+    const erledigt = new Map();
+    for (const i of this._items) {
+      if (i.status === "completed") erledigt.set(String(i.summary).toLowerCase().trim(), i);
+    }
+    this._favs = this._favNamen()
+      .filter((n) => !offenNamen.has(n.toLowerCase()))
+      .map((n) => {
+        const i = erledigt.get(n.toLowerCase());
+        return { summary: n, uid: i ? i.uid : `fav:${n}`, description: i?.description || "" };
+      });
+    this._favTitel.hidden = !this._favs.length;
+    this._favAlle.innerHTML = this._favs.map((i) => this._kachel(i, true, true)).join("");
+  }
+
+  _renderFavKacheln(favReihen) {
+    const liste = (this._favs || []).slice(0, favReihen * (this._spalten || 4));
+    this._favBereich.hidden = !liste.length;
+    this._favGrid.innerHTML = liste.map((i) => this._kachel(i, true, true)).join("");
+  }
+
+  _favTippen(el) {
+    const uid = el.dataset.uid || "";
+    if (!uid.startsWith("fav:")) { this._wieder(uid, el); return; }
+    el.style.opacity = "0.3";
+    this._dienst("add_item", { item: uid.slice(4) }).catch(() => {
+      el.style.opacity = "";
+      if (this._fokus?.uid === uid) this._fokus = null;
+    });
   }
 
   _renderZuletztKacheln(ztReihen) {
     const anzahl = ztReihen * (this._spalten || 4);
     const liste = (this._zuletzt || []).slice(0, anzahl);
     this._ztBereich.hidden = !liste.length;
-    this.shadowRoot.querySelector("ha-card").classList.toggle("mit-zt", !!liste.length);
     this._ztGrid.innerHTML = liste.map((i) => this._kachel(i, true)).join("");
     // Kacheln ersetzen die Chips / tiles replace the chips
     if (liste.length) this._chips.classList.add("aus");
@@ -668,7 +756,9 @@ class ShoppingTilesCard extends HTMLElement {
     // recently completed items, without duplicates and without currently open ones
     const t = this._t;
     const offenNamen = new Set(offen.map((i) => String(i.summary).toLowerCase().trim()));
-    const gesehen = new Set();
+    // Favoriten erscheinen nicht zusätzlich unter „Zuletzt“ / favorites are not repeated under "recent"
+    // (mit favorites_in_recent: true doch auch dort / unless favorites_in_recent: true)
+    const gesehen = new Set(this._config.favorites_in_recent === true ? [] : this._favNamen().map((n) => n.toLowerCase()));
     const zuletzt = [];
     if (this._config.show_recent !== false) {
       for (const i of [...this._items].reverse()) {
@@ -843,10 +933,14 @@ class ShoppingTilesCard extends HTMLElement {
 const EK_EDITOR_TEXT = {
   de: { entity: "Einkaufsliste (To-do-Liste)", rows: "Kachelreihen", rowsAuto: "Automatisch (nach Kartenhöhe)", show_recent: "Zuletzt gekaufte Artikel anzeigen", show_title: "Titel in der Karte anzeigen",
         recent_style: "Zuletzt gekaufte als", styleAuto: "Automatisch (Kacheln, wenn Platz frei ist)", styleChips: "Chips (eine Zeile)", styleTiles: "Kacheln",
+        favorites: "Favoriten (durch Komma getrennt, z. B. Milch, Brot, Eier)",
+        favorites_in_recent: "Favoriten auch unter „Zuletzt gekauft“ zeigen",
         title: "Titel", language: "Sprache", auto: "Automatisch (wie HA)",
         hint: "Eigene Symbole (icons) lassen sich im YAML-Modus festlegen." },
   en: { entity: "Shopping list (to-do list)", rows: "Rows of tiles", rowsAuto: "Automatic (from card height)", show_recent: "Show recently bought items", show_title: "Show title in card",
         recent_style: "Show recently bought as", styleAuto: "Automatic (tiles when there is free space)", styleChips: "Chips (one line)", styleTiles: "Tiles",
+        favorites: "Favorites (comma-separated, e.g. milk, bread, eggs)",
+        favorites_in_recent: "Also show favorites under “Recently bought”",
         title: "Title", language: "Language", auto: "Automatic (same as HA)",
         hint: "Custom icons (icons) can be set in YAML mode." },
 };
@@ -879,6 +973,8 @@ class ShoppingTilesCardEditor extends HTMLElement {
       { name: "recent_style", selector: { select: { mode: "dropdown", options: [
         { value: "auto", label: x.styleAuto }, { value: "chips", label: x.styleChips }, { value: "tiles", label: x.styleTiles },
       ] } } },
+      { name: "favorites", selector: { text: {} } },
+      { name: "favorites_in_recent", selector: { boolean: {} } },
       { name: "show_title", selector: { boolean: {} } },
       { name: "title", selector: { text: {} } },
       { name: "language", selector: { select: { mode: "dropdown", options: [
@@ -901,9 +997,10 @@ class ShoppingTilesCardEditor extends HTMLElement {
     this._form.hass = this._hass;
     this._form.schema = this._schema();
     this._form.data = {
-      show_title: true, show_recent: true, recent_style: "auto", language: "auto", title: "",
+      show_title: true, show_recent: true, recent_style: "auto", language: "auto", title: "", favorites_in_recent: false,
       ...this._config,
       rows: this._config.rows === undefined ? "auto" : String(this._config.rows),
+      favorites: Array.isArray(this._config.favorites) ? this._config.favorites.join(", ") : (this._config.favorites || ""),
     };
   }
 
@@ -911,6 +1008,9 @@ class ShoppingTilesCardEditor extends HTMLElement {
     const neu = { ...this._config, ...werte };
     if (!neu.language || neu.language === "auto") delete neu.language;
     if (!neu.title) delete neu.title;
+    if (Array.isArray(neu.favorites)) neu.favorites = neu.favorites.join(", ");
+    if (!String(neu.favorites || "").trim()) delete neu.favorites;
+    if (neu.favorites_in_recent !== true) delete neu.favorites_in_recent;
     if (neu.show_title !== false) delete neu.show_title;
     if (neu.show_recent !== false) delete neu.show_recent;
     if (!neu.recent_style || neu.recent_style === "auto") delete neu.recent_style;
