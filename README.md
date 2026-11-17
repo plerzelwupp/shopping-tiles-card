@@ -1,6 +1,6 @@
 # Shopping Tiles Card
 
-A small Home Assistant dashboard card that shows the open items of a to-do list as tiles with an icon — a bit more visual than the standard list, closer to what shopping-list apps look like.
+A small Home Assistant dashboard card that shows the open items of a to-do list as tiles with an icon — a bit more visual than the standard list, closer to what shopping-list apps look like. With favorites, sorting by the route through the shop and 20 own icons for items the built-in icon set has nothing for.
 
 It started as a personal project to give a Bring! shopping list in Home Assistant a friendlier look, using only Home Assistant's own building blocks.
 
@@ -12,19 +12,31 @@ It started as a personal project to give a Bring! shopping list in Home Assistan
 
 ## What it does
 
-- **Open items as tiles** – icon, name and the item's details (e.g. "1 kg, organic") in one line below.
-- **Icons are picked automatically** from the item name. About 140 German and 140 English keywords map to 61 icons from Home Assistant's built-in icon set (Material Design Icons). Items without a match get a basket icon. You can add your own mappings.
-- **Colours by category** – fruit & vegetables, dairy, meat & fish, bakery & pantry, household, drinks, sweets & snacks. The colours come from your Home Assistant theme, so light and dark mode both work.
+### Display
+- **Open items as tiles** – icon, name and the item's details (e.g. "1 kg, organic") below.
+- **Icons are picked automatically** from the item name. About 220 German and 170 English keywords map to 88 icons: 68 from Home Assistant's built-in icon set (Material Design Icons) and 20 own icons for common items the built-in set has nothing for (potatoes, tomatoes, cucumber, butter, honey, jam, …). Items without a match get a basket icon. You can add your own mappings.
+- **Colours by category** – fruit & vegetables, bakery & pantry, meat & fish, dairy & frozen, sweets & snacks, drinks, household. The colours come from your Home Assistant theme, so light and dark mode both work.
+- **Own icon set `stc:`** – the 20 own icons are registered as an icon set while the card is loaded, so you can use them in other cards too (e.g. `icon: stc:kartoffel`). Original designs, MIT licensed like the card.
+
+  ![Own icons](images/icons.png)
+
+### Using it
 - **Tap to check off**, with a short "Undo" – it also covers several quick check-offs at once.
 - **Long press (or right-click) to edit** – rename, change the details or delete an item (deleting can be undone too).
-- **Keyboard support** – Tab moves between tiles (also in the "all items" dialog), Enter or Space checks off, F2 or the context menu key opens "Edit". Tiles carry labels for screen readers (not yet tested with a screen reader).
-- **Recently bought** – recently checked-off items appear as small chips; one tap puts them back on the list. On a tall card (e.g. a wall display or a full-screen panel view), free rows are filled with "recently bought" tiles instead (marked with a small ↺).
-- **Favorites** – your own list of items you buy often (e.g. milk, bread, eggs), shown as tiles marked with a small ★; one tap puts the item on the list. If it is under "recently bought", exactly that entry is reactivated (no duplicate in Bring!), otherwise it is added. Favorites already on the list are hidden. Free rows go to favorites first; on a small card they are in the pop-up.  
-  **Note:** the favorites are stored in the card configuration in Home Assistant, not in Bring!. They do not show up in the Bring! app, and if you use the card on several dashboards, you enter them on each one. Bring!'s own favorites and catalog are not passed on to cards by Home Assistant.
-- **"+N more"** – if not everything fits, the last tile opens a pop-up with all open items, the favorites and the recently bought ones.
-- **Fits the sections grid** – all tiles have the same size; the number of tile rows follows the card's height.
 - **Add items** directly in the card.
+- **Keyboard support** – Tab moves between tiles (also in the "all items" dialog), Enter or Space checks off, F2 or the context menu key opens "Edit". Tiles and dialogs carry labels for screen readers (not yet tested with a screen reader).
+
+### Shopping helpers
+- **Sorting** – open items as delivered by the list, alphabetically, or grouped by category in the order of a typical walk through the shop (fruit & vegetables first, household last).
+- **Favorites** – your own list of items you buy often (e.g. milk, bread, eggs), shown as tiles marked with a small ★; one tap puts the item on the list. If it is under "recently bought", exactly that entry is reactivated (no duplicate in Bring!), otherwise it is added. Favorites already on the list are hidden.  
+  **Note:** the favorites are stored in the card configuration in Home Assistant, not in Bring!. They do not show up in the Bring! app, and if you use the card on several dashboards, you enter them on each one. Bring!'s own favorites and catalog are not passed on to cards by Home Assistant.
+- **Recently bought** – recently checked-off items appear as small chips; one tap puts them back on the list. On a tall card they become tiles (marked with a small ↺).
+- **"+N more"** – if not everything fits, the last tile opens a pop-up with all open items, the favorites and the recently bought ones.
+
+### Under the hood
+- **Fits the sections grid and full-screen panel views** – all tiles have the same size; the number of tile rows follows the card's height. Free rows go to favorites first, then to recently bought items – handy on a wall display.
 - **Visual editor** and German/English texts (follows the Home Assistant language).
+- **Robust** – if the list is unavailable for a moment (e.g. while the Bring! integration reloads), the card shows a message instead of outdated items and reconnects by itself.
 - **No dependencies** – one JavaScript file, no Mushroom, button-card or card-mod needed.
 
 | Pop-up with all items | Edit an item |
@@ -65,6 +77,7 @@ entity: todo.shopping_list
 | `rows` | Number of tile rows (1–5). Leave out for automatic (fits the card height). | automatic |
 | `show_recent` | Show recently bought items | `true` |
 | `recent_style` | How to show recently bought items: `auto` (tiles if rows are left after all open items, otherwise chips), `tiles` (always at least one row of tiles, if the card is tall enough) or `chips` | `auto` |
+| `sort` | Order of the open items: `none` (as delivered by the list), `category` (grouped by area, in the order of a typical walk through the shop: fruit & vegetables, bakery & pantry, meat & fish, dairy & frozen, sweets & snacks, drinks, household) or `alpha` (alphabetical) | `none` |
 | `favorites` | Favorite items, comma-separated (e.g. `milk, bread, eggs`) or as a YAML list | – |
 | `favorites_in_recent` | Also show checked-off favorites under "recently bought" (by default they only appear as favorites, so nothing is shown twice) | `false` |
 | `show_title` | Show a title inside the card | `true` |
@@ -78,13 +91,13 @@ Example with your own icons (keywords are matched anywhere in the item name, cas
 type: custom:shopping-tiles-card
 entity: todo.shopping_list
 icons:
-  tomato: mdi:fruit-cherries
-  kartoffel: mdi:sprout
+  celery: mdi:sprout
+  stock: stc:dose
 ```
 
 ## Good to know
 
-- The icon set has no matching icon for some common items (potatoes, tomatoes, butter, honey, jam, …) – they get the basket unless you add your own mapping.
+- A few items still get the basket (e.g. celery, radishes, stock) – you can add your own mapping, also to one of the `stc:` icons.
 - "Recently bought" uses the order in which the list provides completed items. Bring! does not provide a timestamp, so the order is only approximate.
 - Tested with Home Assistant 2026.11 in Chrome on Windows and on an Android phone (light and dark theme), with the Bring! integration, Local To-do and the built-in Shopping List. Older versions may work but have not been tested. Community feedback: also looks good on an iPhone.
 - If the list cannot be read or is not available (e.g. the entity was removed or the integration is being reloaded), the card shows only a message instead of outdated items. As soon as the list is back, it reconnects by itself; after a read error it tries again every 30 seconds.
@@ -98,7 +111,7 @@ If the card is useful to you and you'd like to say thanks, you can buy me a coff
 
 ## Disclaimer
 
-This project is not affiliated with, endorsed by or connected to Bring! Labs AG. "Bring!" is a trademark of its respective owner. No Bring! artwork is used – all icons come from the Material Design Icons set included in Home Assistant.
+This project is not affiliated with, endorsed by or connected to Bring! Labs AG. "Bring!" is a trademark of its respective owner. No Bring! artwork is used – the icons come from the Material Design Icons set included in Home Assistant, plus 20 icons designed for this card.
 
 ## License
 
