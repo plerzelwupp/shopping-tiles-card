@@ -136,7 +136,7 @@ const EK_TEXT = {
     favTitle: "Favoriten", favAdd: "Antippen, um auf die Liste zu setzen",
     favAddBtn: "Zu Favoriten hinzufügen", favRemove: "Aus Favoriten entfernen", favItem: "Favorit", favFail: "Favoriten-Liste nicht erreichbar",
     hold: "lange drücken zum Bearbeiten", edit: "Artikel bearbeiten", name: "Name", desc: "Angabe (z. B. 1 kg, Bio)",
-    save: "Speichern", del: "Löschen", cancel: "Abbrechen", saveFail: "Speichern nicht möglich",
+    save: "Speichern", del: "Löschen", cancel: "Abbrechen", saveFail: "Speichern nicht möglich", undoFail: "Rückgängig hat nicht geklappt",
     deleted: (n) => `„${n}“ gelöscht.`, doneN: (n) => `${n} Artikel abgehakt.`, changes: (n) => `${n} Änderungen.`,
     keys: "Enter: abhaken, F2 oder Kontextmenü-Taste: bearbeiten",
   },
@@ -151,7 +151,7 @@ const EK_TEXT = {
     favTitle: "Favorites", favAdd: "Tap to add it to the list",
     favAddBtn: "Add to favorites", favRemove: "Remove from favorites", favItem: "Favorite", favFail: "Favorites list not reachable",
     hold: "long press to edit", edit: "Edit item", name: "Name", desc: "Details (e.g. 1 kg, organic)",
-    save: "Save", del: "Delete", cancel: "Cancel", saveFail: "Could not save",
+    save: "Save", del: "Delete", cancel: "Cancel", saveFail: "Could not save", undoFail: "Undo failed",
     deleted: (n) => `“${n}” deleted.`, doneN: (n) => `${n} items checked off.`, changes: (n) => `${n} changes.`,
     keys: "Enter: check off, F2 or context menu key: edit",
   },
@@ -296,7 +296,7 @@ class ShoppingTilesCard extends HTMLElement {
     }
     // nach einem Fehler 30 s Pause, sonst würde jedes hass-Update sofort neu anfragen
     // 30 s pause after an error, otherwise every hass update would ask again right away
-    const pause = this._aboFehlerZeit && Date.now() - this._aboFehlerZeit < 29000;
+    const pause = this._aboFehlerZeit && Date.now() - this._aboFehlerZeit < 30000;
     if (!weg && !this._unsub && !this._subscribing && !pause) this._subscribe();
   }
 
@@ -1195,6 +1195,18 @@ class ShoppingTilesCard extends HTMLElement {
     if (feld.textContent !== text) feld.textContent = text;
   }
 
+  // kurze Meldung im Rückgängig-Bereich (Live-Region), ohne Rückgängig-Knopf
+  // short message in the undo area (live region), without the undo button
+  _meldung(text) {
+    this._undoListe = [];
+    this._undo.classList.remove("aus");
+    this._undo.querySelector("button").hidden = true;
+    this._status.classList.add("undo-aktiv");
+    this._undo.querySelector(".undotext").textContent = text;
+    clearTimeout(this._undoTimer);
+    this._undoTimer = setTimeout(() => this._undoEnde(), 6000);
+  }
+
   _undoEnde() {
     this._undo.classList.add("aus");
     this._undo.querySelector("button").hidden = true;
@@ -1209,7 +1221,7 @@ class ShoppingTilesCard extends HTMLElement {
     if (!liste.length) return;
     for (const x of liste) {
       if (x.art === "done") {
-        this._dienst("update_item", { item: x.uid, status: "needs_action" }).catch(() => {});
+        this._dienst("update_item", { item: x.uid, status: "needs_action" }).catch(() => this._meldung(this._t.undoFail));
       } else {
         // Gelöschtes neu anlegen; die Angabe nur, wenn die Liste sie kennt (Merkmal 64)
         // add a deleted item again; the description only if the list supports it (feature 64)
@@ -1217,7 +1229,7 @@ class ShoppingTilesCard extends HTMLElement {
         const daten = { item: x.summary };
         if (x.description && (merkmale & 64)) daten.description = x.description;
         // erst nach bestätigtem Löschen neu anlegen / add again only once the delete is confirmed
-        x.loeschen.then(() => this._dienst("add_item", daten).catch(() => {}), () => {});
+        x.loeschen.then(() => this._dienst("add_item", daten).catch(() => this._meldung(this._t.undoFail)), () => {});
       }
     }
     clearTimeout(this._undoTimer);
