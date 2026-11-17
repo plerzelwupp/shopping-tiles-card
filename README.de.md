@@ -22,14 +22,14 @@ Entstanden ist sie als privates Projekt, um einer Bring!-Einkaufsliste in Home A
 
 ### Bedienung
 - **Antippen hakt ab**, mit kurzem „Rückgängig“ – auch für mehrere schnell abgehakte Artikel auf einmal.
-- **Lange drücken (oder Rechtsklick) zum Bearbeiten** – Name oder Angabe ändern, Artikel löschen (auch das Löschen lässt sich rückgängig machen).
+- **Lange drücken (oder Rechtsklick) zum Bearbeiten** – Name oder Angabe ändern, Artikel löschen (auch das Löschen lässt sich rückgängig machen) oder zu den Favoriten hinzufügen.
 - **Artikel hinzufügen** direkt in der Karte.
 - **Mit Tastatur bedienbar** – Tab springt von Kachel zu Kachel (auch im Fenster mit allen Artikeln), Enter oder Leertaste hakt ab, F2 oder die Kontextmenü-Taste öffnet „Bearbeiten“. Kacheln und Fenster haben Beschriftungen für Screenreader (bisher nicht mit einem Screenreader getestet).
 
 ### Einkaufshilfen
 - **Sortierung** – offene Artikel wie von der Liste geliefert, alphabetisch oder nach Bereich gruppiert, in der Reihenfolge eines typischen Wegs durch den Laden (Obst & Gemüse zuerst, Drogerie & Haushalt zuletzt).
 - **Favoriten** – eine eigene Liste mit oft gekauften Artikeln (z. B. Milch, Brot, Eier), als Kacheln mit kleinem ★; ein Tipp setzt den Artikel auf die Liste. Steht er unter „Zuletzt gekauft“, wird genau dieser Eintrag wieder aktiviert (kein doppelter Eintrag in Bring!), sonst neu angelegt. Favoriten, die schon auf der Liste stehen, werden ausgeblendet.  
-  **Hinweis:** Die Favoriten stehen in der Kartenkonfiguration in Home Assistant, nicht in Bring!. In der Bring!-App sieht man sie also nicht, und wer die Karte auf mehreren Dashboards nutzt, trägt sie dort jeweils ein. Bring!-eigene Favoriten und Kataloge gibt Home Assistant nicht an Karten weiter.
+  **Favoriten-Liste (empfohlen):** Im grafischen Editor legt *Favoriten-Liste anlegen* in Home Assistant eine To-do-Liste „Favoriten“ an (eingebaute Integration Local To-do, nur für Administratoren) und wählt sie aus – oder man wählt eine vorhandene To-do-Liste, auch eine zweite Bring!-Liste. Dann bietet langes Drücken auf einen Artikel **☆ Zu Favoriten hinzufügen**, langes Drücken auf einen Favoriten **Aus Favoriten entfernen**. Die Liste gilt für alle Karten und lässt sich in Home Assistant auch unter *To-do-Listen* bearbeiten. Bereits im Textfeld eingetragene Favoriten lassen sich mit einem Klick übernehmen. Ohne Favoriten-Liste funktioniert das Textfeld `favorites` wie bisher; es steht dann pro Karte in der Kartenkonfiguration, nicht in Bring!.
 - **Zuletzt gekauft** – kürzlich abgehakte Artikel erscheinen als kleine Einträge; ein Tipp setzt sie wieder auf die Liste. Bei einer hohen Karte werden daraus Kacheln (mit kleinem ↺ markiert).
 - **„+N weitere“** – passt nicht alles hinein, öffnet die letzte Kachel ein Fenster mit allen offenen Artikeln, den Favoriten und den zuletzt gekauften Artikeln.
 
@@ -78,7 +78,8 @@ entity: todo.einkaufsliste
 | `show_recent` | Zuletzt gekaufte Artikel anzeigen | `true` |
 | `recent_style` | Darstellung der zuletzt gekauften Artikel: `auto` (Kacheln, wenn nach allen offenen Artikeln Reihen frei sind, sonst kleine Einträge), `tiles` (immer mindestens eine Reihe Kacheln, wenn die Karte hoch genug ist) oder `chips` | `auto` |
 | `sort` | Reihenfolge der offenen Artikel: `none` (wie von der Liste geliefert), `category` (nach Bereich gruppiert, in der Reihenfolge eines typischen Einkaufs: Obst & Gemüse, Backwaren & Vorrat, Fleisch & Fisch, Kühlregal & Tiefkühl, Süßes & Snacks, Getränke, Drogerie & Haushalt) oder `alpha` (alphabetisch) | `none` |
-| `favorites` | Favoriten, durch Komma getrennt (z. B. `Milch, Brot, Eier`) oder als YAML-Liste | – |
+| `favorites_entity` | To-do-Liste mit den Favoriten (z. B. `todo.favoriten`); gilt für alle Karten, Artikel lassen sich per langem Drücken hinzufügen. Hat Vorrang vor `favorites` | – |
+| `favorites` | Favoriten, durch Komma getrennt (z. B. `Milch, Brot, Eier`) oder als YAML-Liste (nur ohne `favorites_entity`) | – |
 | `favorites_in_recent` | Abgehakte Favoriten zusätzlich unter „Zuletzt gekauft“ zeigen (standardmäßig erscheinen sie nur bei den Favoriten, damit nichts doppelt steht) | `false` |
 | `show_title` | Titel in der Karte anzeigen | `true` |
 | `title` | Titeltext | „Einkaufsliste“ |
@@ -97,6 +98,8 @@ icons:
 
 ## Gut zu wissen
 
+- Das Bearbeiten-Fenster bietet nur an, was die Liste kann: Die Angabe erscheint nur bei Listen mit Beschreibungen (z. B. Bring!, Local To-do, nicht die eingebaute Einkaufsliste). Klappt das Speichern nicht, bleibt das Fenster offen und zeigt den Fehler.
+- Grenzen der Anzeige: „Zuletzt gekauft“ zeigt als kleine Einträge bis zu 10 Artikel, im Fenster „Alle anzeigen“ bis zu 24. Favoriten haben keine Obergrenze; wie viele als Kacheln erscheinen, richtet sich nach dem Platz, alle stehen im Fenster „Alle anzeigen“.
 - Einige Artikel bekommen weiterhin den Einkaufskorb (z. B. Sellerie, Radieschen, Brühe) – dafür lässt sich eine eigene Zuordnung anlegen, auch auf eines der `stc:`-Symbole.
 - „Zuletzt gekauft“ nutzt die Reihenfolge, in der die Liste erledigte Artikel liefert. Bring! liefert keinen Zeitpunkt mit, die Reihenfolge ist also nur ungefähr.
 - Getestet mit Home Assistant 2026.11 in Chrome unter Windows und auf einem Android-Handy (helles und dunkles Design), mit der Bring!-Integration, Local To-do und der eingebauten Einkaufsliste. Ältere Versionen funktionieren eventuell, sind aber nicht getestet. Laut Rückmeldung aus der Community sieht die Karte auch auf dem iPhone gut aus.
