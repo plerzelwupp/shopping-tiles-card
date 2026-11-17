@@ -98,6 +98,8 @@ icons:
 
 ## Good to know
 
+- The edit dialog only offers what the list supports: the details field appears only for lists with descriptions (e.g. Bring!, Local To-do, not the built-in Shopping List). If saving fails, the dialog stays open and shows the error.
+- Display limits: "recently bought" shows up to 10 items as chips and up to 24 in the "all items" pop-up. Favorites have no limit; how many appear as tiles depends on the space, all of them are in the "all items" pop-up.
 - A few items still get the basket (e.g. celery, radishes, stock) – you can add your own mapping, also to one of the `stc:` icons.
 - "Recently bought" uses the order in which the list provides completed items. Bring! does not provide a timestamp, so the order is only approximate.
 - Tested with Home Assistant 2026.11 in Chrome on Windows and on an Android phone (light and dark theme), with the Bring! integration, Local To-do and the built-in Shopping List. Older versions may work but have not been tested. Community feedback: also looks good on an iPhone.
