@@ -1,6 +1,6 @@
 # Shopping Tiles Card
 
-A small Home Assistant dashboard card that shows the open items of a to-do list as tiles with an icon — a bit more visual than the standard list, closer to what shopping-list apps look like. With favorites, sorting by the route through the shop and 20 own icons for items the built-in icon set has nothing for.
+A small Home Assistant dashboard card that shows the open items of a to-do list as tiles with an icon — a bit more visual than the standard list, closer to what shopping-list apps look like. With favorites, sorting by the route through the shop and 22 own icons for items the built-in icon set has nothing for.
 
 It started as a personal project to give a Bring! shopping list in Home Assistant a friendlier look, using only Home Assistant's own building blocks.
 
@@ -14,9 +14,9 @@ It started as a personal project to give a Bring! shopping list in Home Assistan
 
 ### Display
 - **Open items as tiles** – icon, name and the item's details (e.g. "1 kg, organic") below.
-- **Icons are picked automatically** from the item name. About 220 German and 170 English keywords map to 88 icons: 68 from Home Assistant's built-in icon set (Material Design Icons) and 20 own icons for common items the built-in set has nothing for (potatoes, tomatoes, cucumber, butter, honey, jam, …). Items without a match get a basket icon. You can add your own mappings.
+- **Icons are picked automatically** from the item name. About 230 German and 175 English keywords map to 90 icons: 68 from Home Assistant's built-in icon set (Material Design Icons) and 22 own icons for common items the built-in set has nothing for (potatoes, tomatoes, onions, garlic, butter, honey, jam, …). Items without a match get a basket icon. You can add your own mappings.
 - **Colours by category** – fruit & vegetables, bakery & pantry, meat & fish, dairy & frozen, sweets & snacks, drinks, household. The colours come from your Home Assistant theme, so light and dark mode both work.
-- **Own icon set `stc:`** – the 20 own icons are registered as an icon set while the card is loaded, so you can use them in other cards too (e.g. `icon: stc:kartoffel`). Original designs, MIT licensed like the card.
+- **Own icon set `stc:`** – the 22 own icons are registered as an icon set while the card is loaded, so you can use them in other cards too (e.g. `icon: stc:kartoffel`). Original designs, MIT licensed like the card.
 
   ![Own icons](images/icons.png)
 
@@ -111,7 +111,7 @@ If the card is useful to you and you'd like to say thanks, you can buy me a coff
 
 ## Disclaimer
 
-This project is not affiliated with, endorsed by or connected to Bring! Labs AG. "Bring!" is a trademark of its respective owner. No Bring! artwork is used – the icons come from the Material Design Icons set included in Home Assistant, plus 20 icons designed for this card.
+This project is not affiliated with, endorsed by or connected to Bring! Labs AG. "Bring!" is a trademark of its respective owner. No Bring! artwork is used – the icons come from the Material Design Icons set included in Home Assistant, plus 22 icons designed for this card.
 
 ## License
 

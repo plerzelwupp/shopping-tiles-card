@@ -1,6 +1,6 @@
 # Shopping Tiles Card
 
-Eine kleine Dashboard-Karte für Home Assistant, die die offenen Artikel einer To-do-Liste als Kacheln mit Symbol zeigt – etwas grafischer als die Standard-Liste, näher an dem, wie Einkaufslisten-Apps aussehen. Mit Favoriten, Sortierung nach dem Weg durch den Laden und 20 eigenen Symbolen für Artikel, für die es in der eingebauten Symbolsammlung nichts gibt.
+Eine kleine Dashboard-Karte für Home Assistant, die die offenen Artikel einer To-do-Liste als Kacheln mit Symbol zeigt – etwas grafischer als die Standard-Liste, näher an dem, wie Einkaufslisten-Apps aussehen. Mit Favoriten, Sortierung nach dem Weg durch den Laden und 22 eigenen Symbolen für Artikel, für die es in der eingebauten Symbolsammlung nichts gibt.
 
 Entstanden ist sie als privates Projekt, um einer Bring!-Einkaufsliste in Home Assistant einen freundlicheren Auftritt zu geben – nur mit den Bordmitteln von Home Assistant.
 
@@ -14,9 +14,9 @@ Entstanden ist sie als privates Projekt, um einer Bring!-Einkaufsliste in Home A
 
 ### Darstellung
 - **Offene Artikel als Kacheln** – Symbol, Name und die Angabe zum Artikel (z. B. „1 kg, Bio“) darunter.
-- **Symbole werden automatisch gewählt**, anhand des Artikelnamens. Rund 220 deutsche und 170 englische Stichworte führen auf 88 Symbole: 68 aus der in Home Assistant eingebauten Symbolsammlung (Material Design Icons) und 20 eigene für häufige Artikel, für die es dort nichts gibt (Kartoffeln, Tomaten, Gurke, Butter, Honig, Marmelade, …). Artikel ohne Treffer bekommen einen Einkaufskorb. Eigene Zuordnungen lassen sich ergänzen.
+- **Symbole werden automatisch gewählt**, anhand des Artikelnamens. Rund 230 deutsche und 175 englische Stichworte führen auf 90 Symbole: 68 aus der in Home Assistant eingebauten Symbolsammlung (Material Design Icons) und 22 eigene für häufige Artikel, für die es dort nichts gibt (Kartoffeln, Tomaten, Zwiebeln, Knoblauch, Butter, Honig, Marmelade, …). Artikel ohne Treffer bekommen einen Einkaufskorb. Eigene Zuordnungen lassen sich ergänzen.
 - **Farben nach Bereich** – Obst & Gemüse, Backwaren & Vorrat, Fleisch & Fisch, Kühlregal & Tiefkühl, Süßes & Snacks, Getränke, Drogerie & Haushalt. Die Farben kommen aus dem Home-Assistant-Design, helles und dunkles Design funktionieren beide.
-- **Eigener Symbolsatz `stc:`** – die 20 eigenen Symbole werden beim Laden der Karte als Symbolsatz angemeldet und lassen sich so auch in anderen Karten nutzen (z. B. `icon: stc:kartoffel`). Eigene Entwürfe, MIT-Lizenz wie die Karte.
+- **Eigener Symbolsatz `stc:`** – die 22 eigenen Symbole werden beim Laden der Karte als Symbolsatz angemeldet und lassen sich so auch in anderen Karten nutzen (z. B. `icon: stc:kartoffel`). Eigene Entwürfe, MIT-Lizenz wie die Karte.
 
   ![Eigene Symbole](images/icons.png)
 
@@ -111,7 +111,7 @@ Wenn Dir die Karte gefällt und Du Danke sagen möchtest, kannst Du mir einen Ka
 
 ## Hinweis
 
-Dieses Projekt steht in keiner Verbindung zur Bring! Labs AG und wird von ihr weder unterstützt noch empfohlen. „Bring!“ ist eine Marke des jeweiligen Inhabers. Es werden keine Bring!-Grafiken verwendet – die Symbole stammen aus der in Home Assistant enthaltenen Sammlung Material Design Icons, dazu 20 eigens für diese Karte gezeichnete.
+Dieses Projekt steht in keiner Verbindung zur Bring! Labs AG und wird von ihr weder unterstützt noch empfohlen. „Bring!“ ist eine Marke des jeweiligen Inhabers. Es werden keine Bring!-Grafiken verwendet – die Symbole stammen aus der in Home Assistant enthaltenen Sammlung Material Design Icons, dazu 22 eigens für diese Karte gezeichnete.
 
 ## Lizenz
 
