@@ -19,7 +19,9 @@ It started as a personal project to give a Bring! shopping list in Home Assistan
 - **Long press (or right-click) to edit** – rename, change the details or delete an item (deleting can be undone too).
 - **Keyboard support** – Tab moves between tiles (also in the "all items" dialog), Enter or Space checks off, F2 or the context menu key opens "Edit". Tiles carry labels for screen readers (not yet tested with a screen reader).
 - **Recently bought** – recently checked-off items appear as small chips; one tap puts them back on the list. On a tall card (e.g. a wall display or a full-screen panel view), free rows are filled with "recently bought" tiles instead (marked with a small ↺).
-- **"+N more"** – if not everything fits, the last tile opens a pop-up with all open items and the recently bought ones.
+- **Favorites** – your own list of items you buy often (e.g. milk, bread, eggs), shown as tiles marked with a small ★; one tap puts the item on the list. If it is under "recently bought", exactly that entry is reactivated (no duplicate in Bring!), otherwise it is added. Favorites already on the list are hidden. Free rows go to favorites first; on a small card they are in the pop-up.  
+  **Note:** the favorites are stored in the card configuration in Home Assistant, not in Bring!. They do not show up in the Bring! app, and if you use the card on several dashboards, you enter them on each one. Bring!'s own favorites and catalog are not passed on to cards by Home Assistant.
+- **"+N more"** – if not everything fits, the last tile opens a pop-up with all open items, the favorites and the recently bought ones.
 - **Fits the sections grid** – all tiles have the same size; the number of tile rows follows the card's height.
 - **Add items** directly in the card.
 - **Visual editor** and German/English texts (follows the Home Assistant language).
@@ -63,6 +65,8 @@ entity: todo.shopping_list
 | `rows` | Number of tile rows (1–5). Leave out for automatic (fits the card height). | automatic |
 | `show_recent` | Show recently bought items | `true` |
 | `recent_style` | How to show recently bought items: `auto` (tiles if rows are left after all open items, otherwise chips), `tiles` (always at least one row of tiles, if the card is tall enough) or `chips` | `auto` |
+| `favorites` | Favorite items, comma-separated (e.g. `milk, bread, eggs`) or as a YAML list | – |
+| `favorites_in_recent` | Also show checked-off favorites under "recently bought" (by default they only appear as favorites, so nothing is shown twice) | `false` |
 | `show_title` | Show a title inside the card | `true` |
 | `title` | Title text | "Shopping list" |
 | `language` | `de` or `en` (default: Home Assistant language, otherwise English) | automatic |
@@ -83,7 +87,7 @@ icons:
 - The icon set has no matching icon for some common items (potatoes, tomatoes, butter, honey, jam, …) – they get the basket unless you add your own mapping.
 - "Recently bought" uses the order in which the list provides completed items. Bring! does not provide a timestamp, so the order is only approximate.
 - Tested with Home Assistant 2026.11 in Chrome on Windows and on an Android phone (light and dark theme), with the Bring! integration, Local To-do and the built-in Shopping List. Older versions may work but have not been tested. Community feedback: also looks good on an iPhone.
-- If the list cannot be read (e.g. the entity was removed), the card shows the error and tries again every 30 seconds.
+- If the list cannot be read or is not available (e.g. the entity was removed or the integration is being reloaded), the card shows only a message instead of outdated items. As soon as the list is back, it reconnects by itself; after a read error it tries again every 30 seconds.
 - This is a hobby project. Feedback and issues are welcome.
 
 ## Support
